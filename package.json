@@ -1,0 +1,161 @@
+{
+  "name": "@effect-react/react",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Effect-first React hooks — one stack to replace your query cache, HTTP layer, state management, forms, and more",
+  "keywords": [
+    "effect",
+    "error-handling",
+    "forms",
+    "functional-programming",
+    "hooks",
+    "http",
+    "query",
+    "react",
+    "state-management",
+    "typescript"
+  ],
+  "homepage": "https://github.com/rika-labs/effect-react",
+  "bugs": {
+    "url": "https://github.com/rika-labs/effect-react/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rika-labs/effect-react"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./async": {
+      "types": "./dist/async/index.d.ts",
+      "import": "./dist/async/index.js",
+      "require": "./dist/async/index.cjs"
+    },
+    "./browser": {
+      "types": "./dist/browser/index.d.ts",
+      "import": "./dist/browser/index.js",
+      "require": "./dist/browser/index.cjs"
+    },
+    "./concurrency": {
+      "types": "./dist/concurrency/index.d.ts",
+      "import": "./dist/concurrency/index.js",
+      "require": "./dist/concurrency/index.cjs"
+    },
+    "./devtools": {
+      "types": "./dist/devtools/index.d.ts",
+      "import": "./dist/devtools/index.js",
+      "require": "./dist/devtools/index.cjs"
+    },
+    "./error-boundary": {
+      "types": "./dist/error-boundary/index.d.ts",
+      "import": "./dist/error-boundary/index.js",
+      "require": "./dist/error-boundary/index.cjs"
+    },
+    "./events": {
+      "types": "./dist/events/index.d.ts",
+      "import": "./dist/events/index.js",
+      "require": "./dist/events/index.cjs"
+    },
+    "./forms": {
+      "types": "./dist/forms/index.d.ts",
+      "import": "./dist/forms/index.js",
+      "require": "./dist/forms/index.cjs"
+    },
+    "./mutation": {
+      "types": "./dist/mutation/index.d.ts",
+      "import": "./dist/mutation/index.js",
+      "require": "./dist/mutation/index.cjs"
+    },
+    "./optimistic": {
+      "types": "./dist/optimistic/index.d.ts",
+      "import": "./dist/optimistic/index.js",
+      "require": "./dist/optimistic/index.cjs"
+    },
+    "./persistence": {
+      "types": "./dist/persistence/index.d.ts",
+      "import": "./dist/persistence/index.js",
+      "require": "./dist/persistence/index.cjs"
+    },
+    "./policies": {
+      "types": "./dist/policies/index.d.ts",
+      "import": "./dist/policies/index.js",
+      "require": "./dist/policies/index.cjs"
+    },
+    "./provider": {
+      "types": "./dist/provider/index.d.ts",
+      "import": "./dist/provider/index.js",
+      "require": "./dist/provider/index.cjs"
+    },
+    "./query": {
+      "types": "./dist/query/index.d.ts",
+      "import": "./dist/query/index.js",
+      "require": "./dist/query/index.cjs"
+    },
+    "./scheduling": {
+      "types": "./dist/scheduling/index.d.ts",
+      "import": "./dist/scheduling/index.js",
+      "require": "./dist/scheduling/index.cjs"
+    },
+    "./ssr": {
+      "types": "./dist/ssr/index.d.ts",
+      "import": "./dist/ssr/index.js",
+      "require": "./dist/ssr/index.cjs"
+    },
+    "./state": {
+      "types": "./dist/state/index.d.ts",
+      "import": "./dist/state/index.js",
+      "require": "./dist/state/index.cjs"
+    },
+    "./streams": {
+      "types": "./dist/streams/index.d.ts",
+      "import": "./dist/streams/index.js",
+      "require": "./dist/streams/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "size:check": "bun run build && bun run scripts/check-exports.ts && bun run scripts/check-bundle-size.ts",
+    "typecheck": "tsgo --noEmit",
+    "lint": "oxlint . --type-aware --type-check --deny-warnings",
+    "lint:fix": "oxlint . --type-aware --type-check --fix",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test && bun run size:check",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "effect": "3.19.16",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^22.16.5",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@typescript/native-preview": "^7.0.0-dev.20260205.1",
+    "@vitest/coverage-v8": "^2.1.9",
+    "jsdom": "^25.0.1",
+    "oxfmt": "^0.28.0",
+    "oxlint": "^1.43.0",
+    "oxlint-tsgolint": "^0.11.4",
+    "tsup": "^8.3.5",
+    "typescript": "^5.9.2",
+    "vitest": "^2.1.9"
+  }
+}

@@ -1,0 +1,32 @@
+import { defineConfig } from "tsup";
+
+export default defineConfig({
+  entry: [
+    "src/index.ts",
+    "src/async/index.ts",
+    "src/browser/index.ts",
+    "src/concurrency/index.ts",
+    "src/devtools/index.ts",
+    "src/error-boundary/index.ts",
+    "src/events/index.ts",
+    "src/forms/index.ts",
+    "src/http/index.ts",
+    "src/mutation/index.ts",
+    "src/optimistic/index.ts",
+    "src/persistence/index.ts",
+    "src/policies/index.ts",
+    "src/provider/index.ts",
+    "src/query/index.ts",
+    "src/result/index.ts",
+    "src/scheduling/index.ts",
+    "src/schema/index.ts",
+    "src/ssr/index.ts",
+    "src/state/index.ts",
+    "src/streams/index.ts",
+  ],
+  format: ["esm", "cjs"],
+  dts: true,
+  sourcemap: true,
+  clean: true,
+  external: ["react", "react-dom", "effect"],
+});
