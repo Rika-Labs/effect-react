@@ -1,3 +1,21 @@
 [submodule "submodules/effect"]
 	path = submodules/effect
 	url = https://github.com/Effect-TS/effect.git
+[submodule "submodules/nextjs"]
+	path = submodules/nextjs
+	url = https://github.com/vercel/next.js.git
+[submodule "submodules/tanstack-query"]
+	path = submodules/tanstack-query
+	url = https://github.com/TanStack/query.git
+[submodule "submodules/tanstack-router"]
+	path = submodules/tanstack-router
+	url = https://github.com/TanStack/router.git
+[submodule "submodules/tanstack-table"]
+	path = submodules/tanstack-table
+	url = https://github.com/TanStack/table.git
+[submodule "submodules/tanstack-virtual"]
+	path = submodules/tanstack-virtual
+	url = https://github.com/TanStack/virtual.git
+[submodule "submodules/tanstack-form"]
+	path = submodules/tanstack-form
+	url = https://github.com/TanStack/form.git

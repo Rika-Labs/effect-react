@@ -24,6 +24,9 @@
     "type": "git",
     "url": "https://github.com/rika-labs/effect-react"
   },
+  "bin": {
+    "effect-react": "./dist/cli/index.js"
+  },
   "files": [
     "dist",
     "README.md",
@@ -31,6 +34,7 @@
     "package.json"
   ],
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -39,6 +43,21 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./adapters": {
+      "types": "./dist/adapters/index.d.ts",
+      "import": "./dist/adapters/index.js",
+      "require": "./dist/adapters/index.cjs"
+    },
+    "./adapters/bun": {
+      "types": "./dist/adapters/bun/index.d.ts",
+      "import": "./dist/adapters/bun/index.js",
+      "require": "./dist/adapters/bun/index.cjs"
+    },
+    "./adapters/node": {
+      "types": "./dist/adapters/node/index.d.ts",
+      "import": "./dist/adapters/node/index.js",
+      "require": "./dist/adapters/node/index.cjs"
     },
     "./async": {
       "types": "./dist/async/index.d.ts",
@@ -54,6 +73,11 @@
       "types": "./dist/concurrency/index.d.ts",
       "import": "./dist/concurrency/index.js",
       "require": "./dist/concurrency/index.cjs"
+    },
+    "./cli": {
+      "types": "./dist/cli/index.d.ts",
+      "import": "./dist/cli/index.js",
+      "require": "./dist/cli/index.cjs"
     },
     "./devtools": {
       "types": "./dist/devtools/index.d.ts",
@@ -74,6 +98,16 @@
       "types": "./dist/forms/index.d.ts",
       "import": "./dist/forms/index.js",
       "require": "./dist/forms/index.cjs"
+    },
+    "./framework": {
+      "types": "./dist/framework/index.d.ts",
+      "import": "./dist/framework/index.js",
+      "require": "./dist/framework/index.cjs"
+    },
+    "./framework/vite": {
+      "types": "./dist/framework/vite.d.ts",
+      "import": "./dist/framework/vite.js",
+      "require": "./dist/framework/vite.cjs"
     },
     "./mutation": {
       "types": "./dist/mutation/index.d.ts",
@@ -105,10 +139,20 @@
       "import": "./dist/query/index.js",
       "require": "./dist/query/index.cjs"
     },
+    "./router": {
+      "types": "./dist/router/index.d.ts",
+      "import": "./dist/router/index.js",
+      "require": "./dist/router/index.cjs"
+    },
     "./scheduling": {
       "types": "./dist/scheduling/index.d.ts",
       "import": "./dist/scheduling/index.js",
       "require": "./dist/scheduling/index.cjs"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js",
+      "require": "./dist/server/index.cjs"
     },
     "./ssr": {
       "types": "./dist/ssr/index.d.ts",
@@ -124,24 +168,48 @@
       "types": "./dist/streams/index.d.ts",
       "import": "./dist/streams/index.js",
       "require": "./dist/streams/index.cjs"
+    },
+    "./table": {
+      "types": "./dist/table/index.d.ts",
+      "import": "./dist/table/index.js",
+      "require": "./dist/table/index.cjs"
+    },
+    "./url-state": {
+      "types": "./dist/url-state/index.d.ts",
+      "import": "./dist/url-state/index.js",
+      "require": "./dist/url-state/index.cjs"
+    },
+    "./virtual": {
+      "types": "./dist/virtual/index.d.ts",
+      "import": "./dist/virtual/index.js",
+      "require": "./dist/virtual/index.cjs"
     }
   },
   "scripts": {
-    "build": "tsup",
+    "dev": "bun run src/cli/index.ts dev",
+    "build": "bun run build:js && bun run build:types",
+    "build:js": "NODE_OPTIONS=--max-old-space-size=4096 tsup",
+    "build:types": "tsc -p tsconfig.build.json",
+    "start": "bun run src/cli/index.ts start",
     "size:check": "bun run build && bun run scripts/check-exports.ts && bun run scripts/check-bundle-size.ts",
+    "effect:check": "bun run scripts/check-effect-standards.ts",
     "typecheck": "tsgo --noEmit",
-    "lint": "oxlint . --type-aware --type-check --deny-warnings",
-    "lint:fix": "oxlint . --type-aware --type-check --fix",
+    "lint": "oxlint src scripts vitest.config.ts tsup.config.ts --type-aware --type-check --deny-warnings",
+    "lint:fix": "oxlint src scripts vitest.config.ts tsup.config.ts --type-aware --type-check --fix",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
-    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test && bun run size:check",
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run effect:check && bun run test && bun run size:check",
     "test": "vitest run --coverage",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@effect/cli": "0.73.2",
+    "@effect/platform-node": "0.104.1",
     "effect": "3.19.16",
+    "magic-string": "^0.30.19",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "typescript": "^5.9.2"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.0",
@@ -155,7 +223,7 @@
     "oxlint": "^1.43.0",
     "oxlint-tsgolint": "^0.11.4",
     "tsup": "^8.3.5",
-    "typescript": "^5.9.2",
+    "vite": "^7.3.1",
     "vitest": "^2.1.9"
   }
 }

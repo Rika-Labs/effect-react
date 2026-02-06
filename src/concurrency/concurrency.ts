@@ -1,3 +1,4 @@
+import { Cause, Effect, Exit } from "effect";
 import { useCallback, useEffect, useRef } from "react";
 import { toMillis, type DurationInput } from "../internal/duration";
 
@@ -26,7 +27,7 @@ export interface ConcurrencyRunner {
 
 interface QueueTask {
   readonly execute: () => void;
-  readonly reject: (reason: unknown) => void;
+  readonly fail: (reason: unknown) => void;
 }
 
 export interface TaskQueueOptions {
@@ -50,6 +51,38 @@ const ensurePositiveInteger = (value: number, label: string): number => {
   return value;
 };
 
+const isPromiseLike = <A>(value: unknown): value is PromiseLike<A> =>
+  typeof value === "object" &&
+  value !== null &&
+  "then" in value &&
+  typeof (value as { readonly then?: unknown }).then === "function";
+
+const fromTaskEffect = <A>(task: () => A | Promise<A>): Effect.Effect<A, unknown, never> =>
+  Effect.try({
+    try: task,
+    catch: (cause) => cause,
+  }).pipe(
+    Effect.flatMap((value) =>
+      isPromiseLike<A>(value)
+        ? Effect.tryPromise({
+            try: () => value,
+            catch: (cause) => cause,
+          })
+        : Effect.succeed(value),
+    ),
+  );
+
+const runEffectWithSquashedCause = <A>(effect: Effect.Effect<A, unknown, never>): Promise<A> =>
+  Effect.runPromiseExit(effect).then((exit) => {
+    if (Exit.isSuccess(exit)) {
+      return exit.value;
+    }
+    throw Cause.squash(exit.cause);
+  });
+
+const fromExit = <A, E>(exit: Exit.Exit<A, E>): Effect.Effect<A, E, never> =>
+  Exit.isSuccess(exit) ? Effect.succeed(exit.value) : Effect.failCause(exit.cause);
+
 export const withConcurrencyLimit = (permits: number): ConcurrencyRunner => {
   const maxPermits = ensurePositiveInteger(permits, "permits");
   let active = 0;
@@ -67,30 +100,40 @@ export const withConcurrencyLimit = (permits: number): ConcurrencyRunner => {
   };
 
   return {
-    run: async <A>(task: () => A | Promise<A>) =>
-      new Promise<A>((resolve, reject) => {
-        const execute = () => {
-          Promise.resolve()
-            .then(task)
-            .then(resolve, reject)
-            .finally(() => {
-              active = Math.max(0, active - 1);
-              drain();
-            });
-        };
+    run: <A>(task: () => A | Promise<A>) =>
+      runEffectWithSquashedCause(
+        Effect.async<A, unknown>((resume) => {
+          const finalize = (exit: Exit.Exit<A, unknown>) => {
+            active = Math.max(0, active - 1);
+            drain();
+            resume(fromExit(exit));
+          };
 
-        queue.push({
-          execute,
-          reject,
-        });
-        drain();
-      }),
+          const entry: QueueTask = {
+            execute: () => {
+              Effect.runCallback(fromTaskEffect(task), {
+                onExit: (exit) => {
+                  finalize(exit as Exit.Exit<A, unknown>);
+                },
+              });
+            },
+            fail: (reason) => {
+              resume(Effect.fail(reason));
+            },
+          };
+
+          queue.push(entry);
+          drain();
+
+          return Effect.void;
+        }),
+      ),
     active: () => active,
     pending: () => queue.length,
     clear: (reason?: string) => {
       const pending = queue.splice(0, queue.length);
       for (const entry of pending) {
-        entry.reject(new QueueCanceledError(reason));
+        entry.fail(new QueueCanceledError(reason));
       }
     },
   };
@@ -120,46 +163,69 @@ export const createTaskQueue = (options: TaskQueueOptions): TaskQueue => {
         return;
       }
       active += 1;
-      void Promise.resolve()
-        .then(() => next.execute())
-        .finally(() => {
-          active = Math.max(0, active - 1);
-          releaseWaiter();
-          schedule();
-        });
+      next.execute();
     }
   };
 
-  const waitForCapacity = async (): Promise<void> =>
-    new Promise<void>((resolve) => {
-      waiters.push(resolve);
+  const waitForCapacityEffect = (): Effect.Effect<void, never, never> =>
+    Effect.async<void, never>((resume) => {
+      const waiter = () => {
+        resume(Effect.void);
+      };
+      waiters.push(waiter);
+      return Effect.sync(() => {
+        const index = waiters.indexOf(waiter);
+        if (index >= 0) {
+          waiters.splice(index, 1);
+        }
+      });
     });
 
   const isAtCapacity = (): boolean => queue.length + active >= capacity;
 
-  const enqueueTask = async <A>(task: () => A | Promise<A>): Promise<A> => {
-    while (isAtCapacity()) {
-      if (overflow === "drop") {
-        throw new QueueOverflowError("Task dropped because queue is full");
-      }
-      if (overflow === "slide") {
-        const dropped = queue.shift();
-        dropped?.reject(new QueueOverflowError("Task removed by sliding policy"));
-        break;
-      }
-      await waitForCapacity();
-    }
+  const enqueueTask = <A>(task: () => A | Promise<A>): Promise<A> =>
+    runEffectWithSquashedCause(
+      Effect.gen(function* () {
+        while (isAtCapacity()) {
+          if (overflow === "drop") {
+            yield* Effect.fail(new QueueOverflowError("Task dropped because queue is full"));
+          }
+          if (overflow === "slide") {
+            const dropped = queue.shift();
+            dropped?.fail(new QueueOverflowError("Task removed by sliding policy"));
+            break;
+          }
+          yield* waitForCapacityEffect();
+        }
 
-    return new Promise<A>((resolve, reject) => {
-      queue.push({
-        execute: () => {
-          Promise.resolve().then(task).then(resolve, reject);
-        },
-        reject,
-      });
-      schedule();
-    });
-  };
+        return yield* Effect.async<A, unknown>((resume) => {
+          const finalize = (exit: Exit.Exit<A, unknown>) => {
+            active = Math.max(0, active - 1);
+            releaseWaiter();
+            schedule();
+            resume(fromExit(exit));
+          };
+
+          const entry: QueueTask = {
+            execute: () => {
+              Effect.runCallback(fromTaskEffect(task), {
+                onExit: (exit) => {
+                  finalize(exit as Exit.Exit<A, unknown>);
+                },
+              });
+            },
+            fail: (reason) => {
+              resume(Effect.fail(reason));
+            },
+          };
+
+          queue.push(entry);
+          schedule();
+
+          return Effect.void;
+        });
+      }),
+    );
 
   return {
     enqueue: enqueueTask,
@@ -169,7 +235,7 @@ export const createTaskQueue = (options: TaskQueueOptions): TaskQueue => {
     clear: (reason?: string) => {
       const pending = queue.splice(0, queue.length);
       for (const entry of pending) {
-        entry.reject(new QueueCanceledError(reason));
+        entry.fail(new QueueCanceledError(reason));
       }
       while (waiters.length > 0) {
         const waiter = waiters.shift();
@@ -194,53 +260,60 @@ export const createRateLimitedRunner = (options: RateLimitedRunnerOptions): Rate
   const limit = ensurePositiveInteger(options.limit, "limit");
   const intervalMs = toMillis(options.interval);
   const starts: number[] = [];
-  const waitingRejectors = new Set<(reason: unknown) => void>();
+  const waitingRejectors = new Set<(reason: QueueCanceledError) => void>();
   let pending = 0;
   let canceled: QueueCanceledError | null = null;
 
-  const acquire = async (): Promise<void> => {
-    while (true) {
-      if (canceled) {
-        throw canceled;
-      }
-      const now = Date.now();
-      while (starts.length > 0) {
-        const firstStart = starts[0];
-        if (firstStart === undefined || now - firstStart < intervalMs) {
-          break;
+  const waitForTurnEffect = (waitMs: number): Effect.Effect<void, QueueCanceledError, never> =>
+    Effect.async<void, QueueCanceledError>((resume) => {
+      const rejector = (reason: QueueCanceledError) => {
+        waitingRejectors.delete(rejector);
+        clearTimeout(timeout);
+        resume(Effect.fail(reason));
+      };
+      waitingRejectors.add(rejector);
+      const timeout = setTimeout(() => {
+        waitingRejectors.delete(rejector);
+        resume(Effect.void);
+      }, waitMs);
+      return Effect.void;
+    });
+
+  const acquireEffect = (): Effect.Effect<void, QueueCanceledError, never> =>
+    Effect.gen(function* () {
+      while (true) {
+        const now = Date.now();
+        while (starts.length > 0 && now - starts[0]! >= intervalMs) {
+          starts.shift();
         }
-        starts.shift();
+        if (starts.length < limit) {
+          starts.push(now);
+          return;
+        }
+        const firstStart = starts[0]!;
+        const waitMs = Math.max(0, intervalMs - (now - firstStart));
+        yield* waitForTurnEffect(waitMs);
       }
-      if (starts.length < limit) {
-        starts.push(now);
-        return;
-      }
-      const firstStart = starts[0]!;
-      const waitMs = Math.max(0, intervalMs - (now - firstStart));
-      await new Promise<void>((resolve, reject) => {
-        const rejector = (reason: unknown) => {
-          waitingRejectors.delete(rejector);
-          reject(reason);
-        };
-        waitingRejectors.add(rejector);
-        setTimeout(() => {
-          waitingRejectors.delete(rejector);
-          resolve();
-        }, waitMs);
-      });
-    }
-  };
+    });
 
   return {
-    run: async <A>(task: () => A | Promise<A>) => {
-      pending += 1;
-      try {
-        await acquire();
-        return await Promise.resolve().then(task);
-      } finally {
-        pending = Math.max(0, pending - 1);
-      }
-    },
+    run: <A>(task: () => A | Promise<A>) =>
+      runEffectWithSquashedCause(
+        Effect.gen(function* () {
+          pending += 1;
+          if (canceled) {
+            yield* Effect.fail(canceled);
+          }
+          yield* acquireEffect();
+          return yield* fromTaskEffect(task);
+        }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              pending = Math.max(0, pending - 1);
+            }),
+          ),
+        ),
+      ),
     pending: () => pending,
     clear: (reason?: string) => {
       canceled = new QueueCanceledError(reason ?? "Rate limited runner canceled");

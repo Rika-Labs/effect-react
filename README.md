@@ -8,16 +8,21 @@
 
 ## What It Replaces
 
-| You Currently Use                    | This Library Provides                                                           |
-| ------------------------------------ | ------------------------------------------------------------------------------- |
-| `@tanstack/react-query`, `swr`       | `useQuery`, `useSuspenseQuery`, `QueryCache`                                    |
-| `zustand`, `jotai`                   | `useSubscriptionRef`, `useLocalSubscriptionRef`                                 |
-| `react-hook-form`, `formik`          | `useForm` with Effect-native submit                                             |
-| `p-limit`, `p-queue`, `p-throttle`   | `useSemaphore`, `createTaskQueue`, `createRateLimitedRunner`                    |
-| `lodash.debounce`, `lodash.throttle` | `useDebouncedRunner`, `useThrottledRunner`                                      |
-| `rxjs` (subset)                      | `usePollingStream`, `useEventSourceStream`, `useWebSocketStream`                |
-| `mitt`, `eventemitter3`              | `createEventChannel`                                                            |
-| `react-use` browser hooks            | `createClipboardSource`, `createGeolocationSource`, `createNetworkStatusSource` |
+| You Currently Use                                       | This Library Provides                                                           |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `@tanstack/react-query`, `swr`                          | `useQuery`, `useSuspenseQuery`, `QueryCache`                                    |
+| `@tanstack/react-router`, `next/router`, `react-router` | `defineRoute`, `createRouter`, `RouterProvider`, typed route loaders            |
+| `nuqs`, custom query-param hooks                        | `defineSearchSchema`, `useUrlState`, `useUrlStates`                             |
+| `next/server actions`, RPC glue                         | `defineServerAction`, `useServerAction`, typed action transport                 |
+| `@tanstack/react-table`                                 | `createTableModel`, `useTable`                                                  |
+| `@tanstack/react-virtual`                               | `createVirtualList`, `createVirtualGrid`, `useVirtualList`, `useVirtualGrid`    |
+| `zustand`, `jotai`                                      | `useSubscriptionRef`, `useLocalSubscriptionRef`                                 |
+| `react-hook-form`, `formik`                             | `useForm` with Effect-native submit                                             |
+| `p-limit`, `p-queue`, `p-throttle`                      | `useSemaphore`, `createTaskQueue`, `createRateLimitedRunner`                    |
+| `lodash.debounce`, `lodash.throttle`                    | `useDebouncedRunner`, `useThrottledRunner`                                      |
+| `rxjs` (subset)                                         | `usePollingStream`, `useEventSourceStream`, `useWebSocketStream`                |
+| `mitt`, `eventemitter3`                                 | `createEventChannel`                                                            |
+| `react-use` browser hooks                               | `createClipboardSource`, `createGeolocationSource`, `createNetworkStatusSource` |
 
 ---
 
@@ -32,6 +37,74 @@ bun add @effect-react/react effect react react-dom
 ```
 
 Peer dependencies: `effect@^3.19`, `react@^19`, `react-dom@^19`.
+
+---
+
+## Full-Stack (Vite + Effect)
+
+Use the framework Vite plugin to discover routes and server actions, and use the built-in Effect CLI commands for lifecycle operations.
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import { effectReactVitePlugin } from "@effect-react/react/framework/vite";
+
+export default defineConfig({
+  plugins: [effectReactVitePlugin()],
+});
+```
+
+Virtual modules provided by the plugin:
+
+- `virtual:effect-react/routes`
+- `virtual:effect-react/actions`
+
+Subpath entry points:
+
+- `@effect-react/react/framework/vite`
+- `@effect-react/react/adapters/node`
+- `@effect-react/react/adapters/bun`
+
+CLI commands:
+
+```bash
+effect-react new my-app
+effect-react dev
+effect-react build
+effect-react start
+```
+
+When you need to construct the app from discovered server actions at runtime, use `defineAppFromManifest` from `@effect-react/react/framework`.
+
+When you need to construct the app from both discovered routes and discovered server actions, use `defineAppFromManifests`.
+
+```ts
+import { defineAppFromManifests } from "@effect-react/react/framework";
+
+const app = await Effect.runPromise(
+  defineAppFromManifests({
+    runtime,
+    actionManifestModule,
+    routeManifestModule,
+  }),
+);
+
+const handleSsr = app.createSsrHandler({
+  render: ({ loaderState }) =>
+    Effect.succeed(
+      <html>
+        <body>{JSON.stringify(loaderState)}</body>
+      </html>,
+    ),
+});
+```
+
+Migration reference: `docs/parity/MIGRATION-MAP.md`
+
+Guides:
+
+- `docs/guides/BUN-FIRST-QUICKSTART.md`
+- `docs/guides/MIGRATE-FROM-NEXTJS.md`
 
 ---
 

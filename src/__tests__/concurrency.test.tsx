@@ -128,6 +128,29 @@ describe("concurrency primitives", () => {
     await expect(second).resolves.toBe("second");
   });
 
+  it("releases backpressure waiters after clear and supports sync tasks", async () => {
+    const queue = createTaskQueue({ capacity: 2, overflow: "backpressure" });
+    let resolveFirst: ((value: string) => void) | undefined;
+
+    const first = queue.enqueue(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveFirst = resolve;
+        }),
+    );
+    const second = queue.enqueue(async () => "second");
+    const third = queue.enqueue(() => "third");
+
+    await Promise.resolve();
+    queue.clear("clear-queue");
+
+    await expect(second).rejects.toBeInstanceOf(QueueCanceledError);
+
+    resolveFirst!("first");
+    await expect(first).resolves.toBe("first");
+    await expect(third).resolves.toBe("third");
+  });
+
   it("rate limits task starts and supports cancellation", async () => {
     vi.useFakeTimers();
     const runner = createRateLimitedRunner({ limit: 1, interval: 10 });
@@ -160,6 +183,14 @@ describe("concurrency primitives", () => {
     const stoppedRunner = createRateLimitedRunner({ limit: 1, interval: 100 });
     stoppedRunner.clear("stopped");
     await expect(stoppedRunner.run(async () => "never")).rejects.toBeInstanceOf(QueueCanceledError);
+  });
+
+  it("runs synchronous tasks through semaphore and rate limiter", async () => {
+    const runner = withConcurrencyLimit(2);
+    await expect(runner.run(() => "sync")).resolves.toBe("sync");
+
+    const rateRunner = createRateLimitedRunner({ limit: 2, interval: 50 });
+    await expect(rateRunner.run(() => "fast")).resolves.toBe("fast");
   });
 
   it("useSemaphore hook replaces runners when permits change", async () => {

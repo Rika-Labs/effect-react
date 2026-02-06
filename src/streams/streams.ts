@@ -1,4 +1,4 @@
-import { Effect, Exit } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toMillis, type DurationInput } from "../internal/duration";
 import { runEffect, type EffectRunHandle } from "../internal/effectRunner";
@@ -22,6 +22,12 @@ const nextBackoff = (attempt: number, policy: BackoffPolicy): number => {
   const factor = policy.factor ?? 2;
   return Math.min(max, initial * factor ** attempt);
 };
+
+const isPromiseLike = <A>(value: unknown): value is PromiseLike<A> =>
+  typeof value === "object" &&
+  value !== null &&
+  "then" in value &&
+  typeof (value as { readonly then?: unknown }).then === "function";
 
 const readEventData = (event: Event): string => {
   const data = (event as { readonly data?: unknown }).data;
@@ -119,19 +125,38 @@ export const usePollingStream = <T>(options: UsePollingStreamOptions<T>): void =
       if (Effect.isEffect(outcome)) {
         const handle = runEffect(runtime, outcome as Effect.Effect<T, unknown, unknown>);
         handleRef.current = handle;
-        void handle.promise.then((exit) => {
-          handleRef.current = null;
-          if (Exit.isSuccess(exit)) {
-            onSuccess(exit.value);
-            return undefined;
-          }
-          onFailure(exit.cause);
-          return undefined;
-        });
+        Effect.runCallback(
+          Effect.tryPromise({
+            try: () => handle.promise,
+            catch: (cause) => cause,
+          }),
+          {
+            onExit: (result) => {
+              handleRef.current = null;
+              if (Exit.isFailure(result)) {
+                onFailure(Cause.squash(result.cause));
+                return;
+              }
+              const exit = result.value;
+              if (Exit.isSuccess(exit)) {
+                onSuccess(exit.value);
+                return;
+              }
+              onFailure(exit.cause);
+            },
+          },
+        );
         return;
       }
 
-      void Promise.resolve(outcome).then(onSuccess, onFailure);
+      if (isPromiseLike<T>(outcome)) {
+        void outcome.then(onSuccess, onFailure);
+        return;
+      }
+
+      queueMicrotask(() => {
+        onSuccess(outcome);
+      });
     };
 
     if (immediate) {

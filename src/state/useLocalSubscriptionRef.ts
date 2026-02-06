@@ -1,4 +1,4 @@
-import { Effect, Exit, Stream, SubscriptionRef } from "effect";
+import { Cause, Effect, Exit, Stream, SubscriptionRef } from "effect";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { runEffect, type EffectRunHandle } from "../internal/effectRunner";
 import { createExternalStore } from "../internal/externalStore";
@@ -24,6 +24,14 @@ const defaultEquals = <S>(left: S, right: S): boolean => Object.is(left, right);
 
 const asSelected = <A, S>(value: A, select: ((value: A) => S) | undefined): S =>
   select ? select(value) : (value as unknown as S);
+
+const runEffectWithSquashedCause = <A>(effect: Effect.Effect<A, unknown, never>): Promise<A> =>
+  Effect.runPromiseExit(effect).then((exit) => {
+    if (Exit.isSuccess(exit)) {
+      return exit.value;
+    }
+    throw Cause.squash(exit.cause);
+  });
 
 export const useLocalSubscriptionRef = <A, S = A>(
   options: UseLocalSubscriptionRefOptions<A, S>,
@@ -73,14 +81,24 @@ export const useLocalSubscriptionRef = <A, S = A>(
       unknown
     >;
 
-    void handle.promise.then((exit) => {
-      if (!active || !Exit.isSuccess(exit)) {
-        return undefined;
-      }
-      refRef.current = exit.value;
-      setReady(true);
-      return undefined;
-    });
+    Effect.runCallback(
+      Effect.tryPromise({
+        try: () => handle.promise,
+        catch: (cause) => cause,
+      }),
+      {
+        onExit: (exit) => {
+          if (!active || Exit.isFailure(exit)) {
+            return;
+          }
+          if (!Exit.isSuccess(exit.value)) {
+            return;
+          }
+          refRef.current = exit.value.value;
+          setReady(true);
+        },
+      },
+    );
 
     return () => {
       active = false;
@@ -134,43 +152,62 @@ export const useLocalSubscriptionRef = <A, S = A>(
   );
 
   const set = useCallback(
-    async (next: A) => {
-      const ref = refRef.current;
-      if (ref === null) {
-        return;
-      }
-      const prev = storeRef.current.getSnapshot() as unknown as A;
-      const handle = runEffect(runtime, SubscriptionRef.set(ref, next));
-      const exit = await handle.promise;
-      if (Exit.isFailure(exit)) {
-        throw new Error("Local SubscriptionRef set failed");
-      }
-      pushSelected(next);
-      runMiddlewares(next, prev);
-    },
+    (next: A) =>
+      runEffectWithSquashedCause(
+        Effect.gen(function* () {
+          const ref = refRef.current;
+          if (ref === null) {
+            return;
+          }
+          const prev = storeRef.current.getSnapshot() as unknown as A;
+          const handle = runEffect(runtime, SubscriptionRef.set(ref, next));
+          const exit = yield* Effect.tryPromise({
+            try: () => handle.promise,
+            catch: (cause) => cause,
+          });
+          if (Exit.isFailure(exit)) {
+            yield* Effect.fail(new Error("Local SubscriptionRef set failed"));
+          }
+          yield* Effect.sync(() => {
+            pushSelected(next);
+            runMiddlewares(next, prev);
+          });
+        }),
+      ),
     [pushSelected, runMiddlewares, runtime],
   );
 
   const update = useCallback(
-    async (updater: (value: A) => A) => {
-      const ref = refRef.current;
-      if (ref === null) {
-        return;
-      }
-      const prev = storeRef.current.getSnapshot() as unknown as A;
-      const handle = runEffect(runtime, SubscriptionRef.update(ref, updater));
-      const exit = await handle.promise;
-      if (Exit.isFailure(exit)) {
-        throw new Error("Local SubscriptionRef update failed");
-      }
-      const readHandle = runEffect(runtime, SubscriptionRef.get(ref));
-      const readExit = await readHandle.promise;
-      if (Exit.isFailure(readExit)) {
-        throw new Error("Local SubscriptionRef get failed");
-      }
-      pushSelected(readExit.value);
-      runMiddlewares(readExit.value, prev);
-    },
+    (updater: (value: A) => A) =>
+      runEffectWithSquashedCause(
+        Effect.gen(function* () {
+          const ref = refRef.current;
+          if (ref === null) {
+            return;
+          }
+          const prev = storeRef.current.getSnapshot() as unknown as A;
+          const handle = runEffect(runtime, SubscriptionRef.update(ref, updater));
+          const exit = yield* Effect.tryPromise({
+            try: () => handle.promise,
+            catch: (cause) => cause,
+          });
+          if (Exit.isFailure(exit)) {
+            yield* Effect.fail(new Error("Local SubscriptionRef update failed"));
+          }
+          const readHandle = runEffect(runtime, SubscriptionRef.get(ref));
+          const readExit = yield* Effect.tryPromise({
+            try: () => readHandle.promise,
+            catch: (cause) => cause,
+          });
+          const currentValue = yield* Exit.isSuccess(readExit)
+            ? Effect.succeed(readExit.value)
+            : Effect.fail(new Error("Local SubscriptionRef get failed"));
+          yield* Effect.sync(() => {
+            pushSelected(currentValue);
+            runMiddlewares(currentValue, prev);
+          });
+        }),
+      ),
     [pushSelected, runMiddlewares, runtime],
   );
 

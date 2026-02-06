@@ -21,6 +21,20 @@ describe("focus listeners", () => {
     clearReconnect();
   });
 
+  it("noops with omitted target when window is unavailable", () => {
+    const listener = vi.fn();
+    const originalWindow = globalThis.window;
+
+    vi.stubGlobal("window", undefined as unknown as Window);
+    const clearFocus = onWindowFocus(listener);
+    const clearReconnect = onWindowReconnect(listener);
+    clearFocus();
+    clearReconnect();
+    vi.stubGlobal("window", originalWindow);
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it("attaches and detaches focus and reconnect listeners", () => {
     const listeners = new Map<string, Set<() => void>>();
     const addEventListener = vi.fn((event: string, listener: () => void) => {

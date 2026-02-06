@@ -1,4 +1,4 @@
-import { Cause, Exit, type Effect } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { toMillis, type DurationInput } from "../internal/duration";
 import { runEffect, type EffectRunHandle } from "../internal/effectRunner";
 import {
@@ -154,6 +154,14 @@ const failureResult = <A, E>(
   isFetching: false,
 });
 
+const runEffectWithSquashedCause = <A>(effect: Effect.Effect<A, unknown, never>): Promise<A> =>
+  Effect.runPromiseExit(effect).then((exit) => {
+    if (Exit.isSuccess(exit)) {
+      return exit.value;
+    }
+    throw Cause.squash(exit.cause);
+  });
+
 export class QueryCache {
   private readonly entries = new Map<string, QueryEntry<unknown, unknown>>();
   private readonly defaultStaleTimeMs: number;
@@ -247,84 +255,98 @@ export class QueryCache {
     return entry.store.getSnapshot().isStale;
   }
 
-  async fetch<A, E, R, ER>(
+  fetchEffect<A, E, R, ER>(
     options: FetchQueryOptions<A, E, R, ER>,
-  ): Promise<QueryResult<A, E | ER>> {
-    const entry =
-      options.entry ??
-      this.ensureEntry<A, E | ER>({
-        key: options.key,
-        ...(options.staleTime !== undefined ? { staleTime: options.staleTime } : {}),
-        ...(options.gcTime !== undefined ? { gcTime: options.gcTime } : {}),
-        ...(options.initialData !== undefined ? { initialData: options.initialData } : {}),
-        ...(options.keyHasher !== undefined ? { keyHasher: options.keyHasher } : {}),
-      });
-    this.applyDurations(entry, options.staleTime, options.gcTime);
-    entry.lastFetch = {
-      key: options.key,
-      query: options.query as Effect.Effect<unknown, unknown, unknown>,
-      runtime: options.runtime,
-      staleTime: options.staleTime,
-      gcTime: options.gcTime,
-      keyHasher: options.keyHasher,
-      structuralSharing: options.structuralSharing,
-    };
+  ): Effect.Effect<QueryResult<A, E | ER>, unknown, never> {
+    return Effect.gen(
+      function* (this: QueryCache) {
+        const entry =
+          options.entry ??
+          this.ensureEntry<A, E | ER>({
+            key: options.key,
+            ...(options.staleTime !== undefined ? { staleTime: options.staleTime } : {}),
+            ...(options.gcTime !== undefined ? { gcTime: options.gcTime } : {}),
+            ...(options.initialData !== undefined ? { initialData: options.initialData } : {}),
+            ...(options.keyHasher !== undefined ? { keyHasher: options.keyHasher } : {}),
+          });
+        this.applyDurations(entry, options.staleTime, options.gcTime);
+        entry.lastFetch = {
+          key: options.key,
+          query: options.query as Effect.Effect<unknown, unknown, unknown>,
+          runtime: options.runtime,
+          staleTime: options.staleTime,
+          gcTime: options.gcTime,
+          keyHasher: options.keyHasher,
+          structuralSharing: options.structuralSharing,
+        };
 
-    if (entry.inFlight) {
-      if (options.force === true) {
-        entry.runId += 1;
-        entry.inFlight.cancel();
-        entry.inFlight = undefined;
-      } else {
-        await entry.inFlight.promise;
-        return entry.store.getSnapshot() as QueryResult<A, E | ER>;
-      }
-    }
+        if (entry.inFlight) {
+          if (options.force === true) {
+            entry.runId += 1;
+            entry.inFlight.cancel();
+            entry.inFlight = undefined;
+          } else {
+            yield* Effect.tryPromise({
+              try: () => entry.inFlight!.promise,
+              catch: (cause) => cause,
+            });
+            return entry.store.getSnapshot() as QueryResult<A, E | ER>;
+          }
+        }
 
-    const snapshot = entry.store.getSnapshot();
-    entry.store.setSnapshot(loadingResult(snapshot as QueryResult<A, E | ER>));
+        const snapshot = entry.store.getSnapshot();
+        entry.store.setSnapshot(loadingResult(snapshot as QueryResult<A, E | ER>));
 
-    const runId = entry.runId + 1;
-    entry.runId = runId;
-    const handle = runEffect(options.runtime, options.query) as EffectRunHandle<A, E | ER>;
-    entry.inFlight = handle;
+        const runId = entry.runId + 1;
+        entry.runId = runId;
+        const handle = runEffect(options.runtime, options.query) as EffectRunHandle<A, E | ER>;
+        entry.inFlight = handle;
 
-    const exit = await handle.promise;
-    if (entry.runId !== runId) {
-      return entry.store.getSnapshot() as QueryResult<A, E | ER>;
-    }
-
-    entry.inFlight = undefined;
-
-    if (Exit.isSuccess(exit)) {
-      this.writeSuccess(entry, exit.value, options.structuralSharing);
-      return entry.store.getSnapshot() as QueryResult<A, E | ER>;
-    }
-
-    const cause = exit.cause as Cause.Cause<E | ER>;
-    if (Cause.isInterruptedOnly(cause)) {
-      const current = entry.store.getSnapshot();
-      if (current.data === undefined) {
-        entry.store.setSnapshot(initialResult());
-      } else {
-        entry.store.setSnapshot({
-          ...current,
-          status: "success",
-          cause: undefined,
-          isStale: true,
-          isFetching: false,
+        const exit = yield* Effect.tryPromise({
+          try: () => handle.promise,
+          catch: (cause) => cause,
         });
-      }
-      return entry.store.getSnapshot() as QueryResult<A, E | ER>;
-    }
+        if (entry.runId !== runId) {
+          return entry.store.getSnapshot() as QueryResult<A, E | ER>;
+        }
 
-    const latest = entry.store.getSnapshot() as QueryResult<A, E | ER>;
-    entry.store.setSnapshot(failureResult(latest, cause));
-    return entry.store.getSnapshot() as QueryResult<A, E | ER>;
+        entry.inFlight = undefined;
+
+        if (Exit.isSuccess(exit)) {
+          this.writeSuccess(entry, exit.value, options.structuralSharing);
+          return entry.store.getSnapshot() as QueryResult<A, E | ER>;
+        }
+
+        const cause = exit.cause as Cause.Cause<E | ER>;
+        if (Cause.isInterruptedOnly(cause)) {
+          const current = entry.store.getSnapshot();
+          if (current.data === undefined) {
+            entry.store.setSnapshot(initialResult());
+          } else {
+            entry.store.setSnapshot({
+              ...current,
+              status: "success",
+              cause: undefined,
+              isStale: true,
+              isFetching: false,
+            });
+          }
+          return entry.store.getSnapshot() as QueryResult<A, E | ER>;
+        }
+
+        const latest = entry.store.getSnapshot() as QueryResult<A, E | ER>;
+        entry.store.setSnapshot(failureResult(latest, cause));
+        return entry.store.getSnapshot() as QueryResult<A, E | ER>;
+      }.bind(this),
+    );
   }
 
-  async prefetch<A, E, R, ER>(options: FetchQueryOptions<A, E, R, ER>): Promise<void> {
-    await this.fetch(options);
+  fetch<A, E, R, ER>(options: FetchQueryOptions<A, E, R, ER>): Promise<QueryResult<A, E | ER>> {
+    return runEffectWithSquashedCause(this.fetchEffect(options));
+  }
+
+  prefetch<A, E, R, ER>(options: FetchQueryOptions<A, E, R, ER>): Promise<void> {
+    return runEffectWithSquashedCause(this.fetchEffect(options).pipe(Effect.asVoid));
   }
 
   getQueryData<A>(key: QueryKey, keyHasher: KeyHasher = this.keyHasher): A | undefined {

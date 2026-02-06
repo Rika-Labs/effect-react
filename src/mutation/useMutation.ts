@@ -1,5 +1,4 @@
-import { Exit } from "effect";
-import type { Cause } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { runEffect, type EffectRunHandle } from "../internal/effectRunner";
 import { createExternalStore } from "../internal/externalStore";
@@ -27,6 +26,32 @@ const resolveMutation = <V, A, E, R>(
   mutation: UseMutationOptions<V, A, E, R>["mutation"],
   variables: V,
 ) => (typeof mutation === "function" ? mutation(variables) : mutation);
+
+const isPromiseLike = <A>(value: unknown): value is PromiseLike<A> =>
+  typeof value === "object" &&
+  value !== null &&
+  "then" in value &&
+  typeof (value as { readonly then?: unknown }).then === "function";
+
+const fromMaybePromiseEffect = <A>(
+  thunk: () => A | PromiseLike<A>,
+): Effect.Effect<A, unknown, never> =>
+  Effect.try({
+    try: thunk,
+    catch: (cause) => cause,
+  }).pipe(
+    Effect.flatMap((value) =>
+      isPromiseLike<A>(value)
+        ? Effect.tryPromise({
+            try: () => value,
+            catch: (cause) => cause,
+          })
+        : Effect.succeed(value),
+    ),
+  );
+
+const runEffectWithSquashedCause = <A>(effect: Effect.Effect<A, unknown, never>): Promise<A> =>
+  Effect.runPromise(effect.pipe(Effect.catchAllCause((cause) => Effect.fail(Cause.squash(cause)))));
 
 export const useMutation = <V, A, E, R>(
   options: UseMutationOptions<V, A, E, R>,
@@ -74,70 +99,76 @@ export const useMutation = <V, A, E, R>(
   );
 
   const mutate = useCallback(
-    async (variables: V) => {
-      runIdRef.current += 1;
-      const runId = runIdRef.current;
+    (variables: V) =>
+      runEffectWithSquashedCause(
+        Effect.gen(function* () {
+          runIdRef.current += 1;
+          const runId = runIdRef.current;
 
-      if (handleRef.current !== null) {
-        handleRef.current.cancel();
-        handleRef.current = null;
-      }
+          if (handleRef.current !== null) {
+            handleRef.current.cancel();
+            handleRef.current = null;
+          }
 
-      options.optimistic?.apply(variables);
+          options.optimistic?.apply(variables);
 
-      setSnapshot({
-        status: "pending",
-        data: storeRef.current.getSnapshot().data,
-        cause: undefined,
-        submittedAt: Date.now(),
-      });
+          setSnapshot({
+            status: "pending",
+            data: storeRef.current.getSnapshot().data,
+            cause: undefined,
+            submittedAt: Date.now(),
+          });
 
-      const handle = runEffect(runtime, resolveMutation(options.mutation, variables));
-      handleRef.current = handle;
+          const handle = runEffect(runtime, resolveMutation(options.mutation, variables));
+          handleRef.current = handle;
 
-      const exit = await handle.promise;
-      if (runIdRef.current !== runId) {
-        return exit;
-      }
-      handleRef.current = null;
+          const exit = yield* Effect.tryPromise({
+            try: () => handle.promise,
+            catch: (cause) => cause,
+          });
+          if (runIdRef.current !== runId) {
+            return exit;
+          }
+          handleRef.current = null;
 
-      if (Exit.isSuccess(exit)) {
-        const result: MutationResult<A, E> = {
-          status: "success",
-          data: exit.value,
-          cause: undefined,
-          submittedAt: Date.now(),
-        };
-        setSnapshot(result);
-        for (const target of resolveTargets(options.invalidate)) {
-          cache.invalidate(target);
-        }
-        if (options.onSuccess) {
-          await options.onSuccess(exit.value, variables);
-        }
-        if (options.onSettled) {
-          await options.onSettled(result, variables);
-        }
-        return exit;
-      }
+          if (Exit.isSuccess(exit)) {
+            const result: MutationResult<A, E> = {
+              status: "success",
+              data: exit.value,
+              cause: undefined,
+              submittedAt: Date.now(),
+            };
+            setSnapshot(result);
+            for (const target of resolveTargets(options.invalidate)) {
+              cache.invalidate(target);
+            }
+            if (options.onSuccess) {
+              yield* fromMaybePromiseEffect(() => options.onSuccess!(exit.value, variables));
+            }
+            if (options.onSettled) {
+              yield* fromMaybePromiseEffect(() => options.onSettled!(result, variables));
+            }
+            return exit;
+          }
 
-      const cause = exit.cause as Cause.Cause<E>;
-      options.optimistic?.rollback(variables, cause);
-      const result: MutationResult<A, E> = {
-        status: "failure",
-        data: undefined,
-        cause,
-        submittedAt: Date.now(),
-      };
-      setSnapshot(result);
-      if (options.onError) {
-        await options.onError(cause, variables);
-      }
-      if (options.onSettled) {
-        await options.onSettled(result, variables);
-      }
-      return exit;
-    },
+          const cause = exit.cause as Cause.Cause<E>;
+          options.optimistic?.rollback(variables, cause);
+          const result: MutationResult<A, E> = {
+            status: "failure",
+            data: undefined,
+            cause,
+            submittedAt: Date.now(),
+          };
+          setSnapshot(result);
+          if (options.onError) {
+            yield* fromMaybePromiseEffect(() => options.onError!(cause, variables));
+          }
+          if (options.onSettled) {
+            yield* fromMaybePromiseEffect(() => options.onSettled!(result, variables));
+          }
+          return exit;
+        }),
+      ),
     [cache, options, runtime, setSnapshot],
   );
 

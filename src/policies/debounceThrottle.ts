@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import type { Effect, Exit } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { toMillis, type DurationInput } from "../internal/duration";
 import { runEffect, type EffectRunHandle } from "../internal/effectRunner";
 import { useRuntime } from "../provider/useRuntime";
@@ -19,9 +19,40 @@ export interface ExecutionPolicy {
 
 interface PendingTask<A> {
   readonly task: () => A | Promise<A>;
-  readonly resolve: (value: A | PromiseLike<A>) => void;
-  readonly reject: (reason?: unknown) => void;
+  readonly resume: (effect: Effect.Effect<A, unknown, never>) => void;
 }
+
+const isPromiseLike = <A>(value: unknown): value is PromiseLike<A> =>
+  typeof value === "object" &&
+  value !== null &&
+  "then" in value &&
+  typeof (value as { readonly then?: unknown }).then === "function";
+
+const fromTaskEffect = <A>(task: () => A | Promise<A>): Effect.Effect<A, unknown, never> =>
+  Effect.try({
+    try: task,
+    catch: (cause) => cause,
+  }).pipe(
+    Effect.flatMap((result) =>
+      isPromiseLike<A>(result)
+        ? Effect.tryPromise({
+            try: () => result,
+            catch: (cause) => cause,
+          })
+        : Effect.succeed(result),
+    ),
+  );
+
+const fromExit = <A, E>(exit: Exit.Exit<A, E>): Effect.Effect<A, E, never> =>
+  Exit.isSuccess(exit) ? Effect.succeed(exit.value) : Effect.failCause(exit.cause);
+
+const runEffectWithSquashedCause = <A>(effect: Effect.Effect<A, unknown, never>): Promise<A> =>
+  Effect.runPromiseExit(effect).then((exit) => {
+    if (Exit.isSuccess(exit)) {
+      return exit.value;
+    }
+    throw Cause.squash(exit.cause);
+  });
 
 export const createDebouncePolicy = (duration: DurationInput): ExecutionPolicy => {
   const durationMs = toMillis(duration);
@@ -32,7 +63,7 @@ export const createDebouncePolicy = (duration: DurationInput): ExecutionPolicy =
     if (pendingTask !== undefined) {
       const currentPending = pendingTask;
       queueMicrotask(() => {
-        currentPending.reject(new PolicyCanceledError(reason));
+        currentPending.resume(Effect.fail(new PolicyCanceledError(reason)));
       });
       pendingTask = undefined;
     }
@@ -44,24 +75,39 @@ export const createDebouncePolicy = (duration: DurationInput): ExecutionPolicy =
 
   return {
     run: <A>(task: () => A | Promise<A>) =>
-      new Promise<A>((resolve, reject) => {
-        clearPending("Debounced task replaced");
-        pendingTask = {
-          task,
-          resolve: resolve as (value: unknown) => void,
-          reject,
-        };
-        timer = setTimeout(() => {
-          timer = undefined;
-          const current = pendingTask as PendingTask<A> | undefined;
-          pendingTask = undefined;
-          if (current === undefined) {
-            reject(new PolicyCanceledError("Debounced task missing"));
-            return;
-          }
-          Promise.resolve(current.task()).then(current.resolve, current.reject);
-        }, durationMs);
-      }),
+      runEffectWithSquashedCause(
+        Effect.async<A, unknown>((resume) => {
+          clearPending("Debounced task replaced");
+          const currentTask: PendingTask<A> = {
+            task,
+            resume,
+          };
+          pendingTask = currentTask as PendingTask<unknown>;
+          timer = setTimeout(() => {
+            timer = undefined;
+            const current = pendingTask as PendingTask<A> | undefined;
+            pendingTask = undefined;
+            if (current === undefined) {
+              resume(Effect.fail(new PolicyCanceledError("Debounced task missing")));
+              return;
+            }
+            Effect.runCallback(fromTaskEffect(current.task), {
+              onExit: (exit) => {
+                current.resume(fromExit(exit as Exit.Exit<A, unknown>));
+              },
+            });
+          }, durationMs);
+          return Effect.sync(() => {
+            if (pendingTask === currentTask) {
+              pendingTask = undefined;
+            }
+            if (timer !== undefined) {
+              clearTimeout(timer);
+              timer = undefined;
+            }
+          });
+        }),
+      ),
     cancel: (reason?: string) => {
       clearPending(reason ?? "Debounced task canceled");
     },
@@ -83,31 +129,48 @@ export const createThrottlePolicy = (duration: DurationInput): ExecutionPolicy =
     }
     const current = queuedTask;
     queuedTask = undefined;
-    Promise.resolve(current.task()).then(current.resolve, current.reject);
+    Effect.runCallback(fromTaskEffect(current.task), {
+      onExit: (exit) => {
+        current.resume(fromExit(exit as Exit.Exit<unknown, unknown>));
+      },
+    });
     timer = setTimeout(drain, durationMs);
   };
 
   return {
     run: <A>(task: () => A | Promise<A>) =>
-      new Promise<A>((resolve, reject) => {
-        if (!blocked) {
-          blocked = true;
-          Promise.resolve(task()).then(resolve, reject);
-          timer = setTimeout(drain, durationMs);
-          return;
-        }
-        if (queuedTask !== undefined) {
-          const previousQueued = queuedTask;
-          queueMicrotask(() => {
-            previousQueued.reject(new PolicyCanceledError("Throttled task replaced"));
+      runEffectWithSquashedCause(
+        Effect.async<A, unknown>((resume) => {
+          if (!blocked) {
+            blocked = true;
+            Effect.runCallback(fromTaskEffect(task), {
+              onExit: (exit) => {
+                resume(fromExit(exit as Exit.Exit<A, unknown>));
+              },
+            });
+            timer = setTimeout(drain, durationMs);
+            return Effect.void;
+          }
+          if (queuedTask !== undefined) {
+            const previousQueued = queuedTask as PendingTask<A>;
+            queueMicrotask(() => {
+              previousQueued.resume(
+                Effect.fail(new PolicyCanceledError("Throttled task replaced")),
+              );
+            });
+          }
+          const currentTask: PendingTask<A> = {
+            task,
+            resume,
+          };
+          queuedTask = currentTask as PendingTask<unknown>;
+          return Effect.sync(() => {
+            if (queuedTask === currentTask) {
+              queuedTask = undefined;
+            }
           });
-        }
-        queuedTask = {
-          task,
-          resolve: resolve as (value: unknown) => void,
-          reject,
-        };
-      }),
+        }),
+      ),
     cancel: (reason?: string) => {
       if (timer !== undefined) {
         clearTimeout(timer);
@@ -117,7 +180,9 @@ export const createThrottlePolicy = (duration: DurationInput): ExecutionPolicy =
       if (queuedTask !== undefined) {
         const currentQueued = queuedTask;
         queueMicrotask(() => {
-          currentQueued.reject(new PolicyCanceledError(reason ?? "Throttled task canceled"));
+          currentQueued.resume(
+            Effect.fail(new PolicyCanceledError(reason ?? "Throttled task canceled")),
+          );
         });
         queuedTask = undefined;
       }

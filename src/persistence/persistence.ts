@@ -1,3 +1,4 @@
+import { Cause, Effect, Exit } from "effect";
 import type { QueryCache } from "../query/QueryCache";
 import type { DehydratedState } from "../query/types";
 
@@ -30,31 +31,76 @@ const jsonCodec = <A>(): PersistenceCodec<A> => ({
   decode: (encoded) => JSON.parse(encoded) as A,
 });
 
+const isPromiseLike = <A>(value: unknown): value is PromiseLike<A> =>
+  typeof value === "object" &&
+  value !== null &&
+  "then" in value &&
+  typeof (value as { readonly then?: unknown }).then === "function";
+
+const runEffectWithSquashedCause = <A>(effect: Effect.Effect<A, unknown, never>): Promise<A> =>
+  Effect.runPromiseExit(effect).then((exit) => {
+    if (Exit.isSuccess(exit)) {
+      return exit.value;
+    }
+    throw Cause.squash(exit.cause);
+  });
+
+const fromMaybePromiseEffect = <A>(
+  thunk: () => A | PromiseLike<A>,
+): Effect.Effect<A, unknown, never> =>
+  Effect.try({
+    try: thunk,
+    catch: (cause) => cause,
+  }).pipe(
+    Effect.flatMap((value) =>
+      isPromiseLike<A>(value)
+        ? Effect.tryPromise({
+            try: () => value,
+            catch: (cause) => cause,
+          })
+        : Effect.succeed(value),
+    ),
+  );
+
+const fromPromiseEffect = <A>(thunk: () => Promise<A>): Effect.Effect<A, unknown, never> =>
+  Effect.tryPromise({
+    try: thunk,
+    catch: (cause) => cause,
+  });
+
 export const createPersistenceStore = <A>(
   options: CreatePersistenceStoreOptions<A>,
 ): PersistenceStore<A> => {
   const codec = options.codec ?? jsonCodec<A>();
 
+  const saveEffect = (value: A): Effect.Effect<void, unknown, never> =>
+    Effect.gen(function* () {
+      const encoded = codec.encode(value);
+      yield* fromMaybePromiseEffect(() => options.storage.setItem(options.key, encoded));
+    });
+
+  const loadEffect = (): Effect.Effect<A | undefined, unknown, never> =>
+    fromMaybePromiseEffect(() => options.storage.getItem(options.key)).pipe(
+      Effect.map((encoded) => {
+        if (encoded === null) {
+          return undefined;
+        }
+        try {
+          return codec.decode(encoded);
+        } catch {
+          return undefined;
+        }
+      }),
+    );
+
+  const clearEffect = (): Effect.Effect<void, unknown, never> =>
+    fromMaybePromiseEffect(() => options.storage.removeItem(options.key));
+
   return {
     key: options.key,
-    save: async (value: A) => {
-      const encoded = codec.encode(value);
-      await options.storage.setItem(options.key, encoded);
-    },
-    load: async () => {
-      const encoded = await options.storage.getItem(options.key);
-      if (encoded === null) {
-        return undefined;
-      }
-      try {
-        return codec.decode(encoded);
-      } catch {
-        return undefined;
-      }
-    },
-    clear: async () => {
-      await options.storage.removeItem(options.key);
-    },
+    save: (value) => runEffectWithSquashedCause(saveEffect(value)),
+    load: () => runEffectWithSquashedCause(loadEffect()),
+    clear: () => runEffectWithSquashedCause(clearEffect()),
   };
 };
 
@@ -77,33 +123,41 @@ export const createMemoryStorage = (): MemoryStorage => {
   };
 };
 
-export const persistQueryState = async (
+export const persistQueryState = (
   cache: QueryCache,
   store: PersistenceStore<DehydratedState>,
-): Promise<void> => {
-  await store.save(cache.dehydrate());
-};
+): Promise<void> =>
+  runEffectWithSquashedCause(
+    Effect.gen(function* () {
+      yield* fromPromiseEffect(() => store.save(cache.dehydrate()));
+    }),
+  );
 
-export const hydrateQueryState = async (
+export const hydrateQueryState = (
   cache: QueryCache,
   store: PersistenceStore<DehydratedState>,
-): Promise<boolean> => {
-  const state = await store.load();
-  if (state === undefined) {
-    return false;
-  }
-  cache.hydrate(state);
-  return true;
-};
+): Promise<boolean> =>
+  runEffectWithSquashedCause(
+    Effect.gen(function* () {
+      const state = yield* fromPromiseEffect(() => store.load());
+      if (state === undefined) {
+        return false;
+      }
+      cache.hydrate(state);
+      return true;
+    }),
+  );
 
-export const persistSubscriptionState = async <A>(
+export const persistSubscriptionState = <A>(
   store: PersistenceStore<A>,
   state: A | (() => A),
-): Promise<void> => {
-  const value = typeof state === "function" ? (state as () => A)() : state;
-  await store.save(value);
-};
+): Promise<void> =>
+  runEffectWithSquashedCause(
+    Effect.gen(function* () {
+      const value = typeof state === "function" ? (state as () => A)() : state;
+      yield* fromPromiseEffect(() => store.save(value));
+    }),
+  );
 
-export const hydratePersistedSnapshot = async <A>(
-  store: PersistenceStore<A>,
-): Promise<A | undefined> => store.load();
+export const hydratePersistedSnapshot = <A>(store: PersistenceStore<A>): Promise<A | undefined> =>
+  runEffectWithSquashedCause(fromPromiseEffect(() => store.load()));

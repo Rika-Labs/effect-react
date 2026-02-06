@@ -1,3 +1,4 @@
+import { Cause, Effect, Exit } from "effect";
 import {
   createExternalStore,
   type ExternalStore,
@@ -11,6 +12,17 @@ export interface HeadlessSource<T> {
 }
 
 const createSource = <T>(initial: T): ExternalStore<T> => createExternalStore(initial);
+
+const normalizeError = (value: unknown): Error =>
+  value instanceof Error ? value : new Error(String(value));
+
+const runEffectWithSquashedCause = <A>(effect: Effect.Effect<A, unknown, never>): Promise<A> =>
+  Effect.runPromiseExit(effect).then((exit) => {
+    if (Exit.isSuccess(exit)) {
+      return exit.value;
+    }
+    throw Cause.squash(exit.cause);
+  });
 
 export interface ClipboardSnapshot {
   readonly text: string | null;
@@ -31,48 +43,52 @@ export const createClipboardSource = (options: ClipboardSourceOptions = {}): Cli
     options.clipboard ?? (typeof navigator === "undefined" ? undefined : navigator.clipboard);
   const store = createSource<ClipboardSnapshot>({ text: null, error: null });
 
-  const read = async (): Promise<string> => {
+  const readEffect = (): Effect.Effect<string, Error, never> => {
     if (!clipboard) {
       const error = new Error("Clipboard API is not available");
       store.setSnapshot({ text: store.getSnapshot().text, error });
-      throw error;
+      return Effect.fail(error);
     }
-    try {
-      const text = await clipboard.readText();
-      store.setSnapshot({ text, error: null });
-      return text;
-    } catch (error) {
-      const normalized = error instanceof Error ? error : new Error(String(error));
-      store.setSnapshot({ text: store.getSnapshot().text, error: normalized });
-      throw normalized;
-    }
+
+    return Effect.tryPromise({
+      try: () => clipboard.readText(),
+      catch: normalizeError,
+    }).pipe(
+      Effect.tap((text) => Effect.sync(() => store.setSnapshot({ text, error: null }))),
+      Effect.tapError((error) =>
+        Effect.sync(() => store.setSnapshot({ text: store.getSnapshot().text, error })),
+      ),
+    );
   };
 
-  const write = async (value: string): Promise<void> => {
+  const writeEffect = (value: string): Effect.Effect<void, Error, never> => {
     if (!clipboard) {
       const error = new Error("Clipboard API is not available");
       store.setSnapshot({ text: store.getSnapshot().text, error });
-      throw error;
+      return Effect.fail(error);
     }
-    try {
-      await clipboard.writeText(value);
-      store.setSnapshot({ text: value, error: null });
-    } catch (error) {
-      const normalized = error instanceof Error ? error : new Error(String(error));
-      store.setSnapshot({ text: store.getSnapshot().text, error: normalized });
-      throw normalized;
-    }
+
+    return Effect.tryPromise({
+      try: () => clipboard.writeText(value),
+      catch: normalizeError,
+    }).pipe(
+      Effect.tap(() => Effect.sync(() => store.setSnapshot({ text: value, error: null }))),
+      Effect.tapError((error) =>
+        Effect.sync(() => store.setSnapshot({ text: store.getSnapshot().text, error })),
+      ),
+      Effect.asVoid,
+    );
   };
 
   return {
     getSnapshot: () => store.getSnapshot(),
     subscribe: (listener) => store.subscribe(listener),
-    refresh: async () => {
-      await read();
-      return store.getSnapshot();
-    },
-    read,
-    write,
+    refresh: () =>
+      runEffectWithSquashedCause(
+        readEffect().pipe(Effect.flatMap(() => Effect.sync(() => store.getSnapshot()))),
+      ),
+    read: () => runEffectWithSquashedCause(readEffect()),
+    write: (value) => runEffectWithSquashedCause(writeEffect(value)),
   };
 };
 
@@ -106,27 +122,26 @@ export const createGeolocationSource = (
     store.setSnapshot({ position: store.getSnapshot().position, error: normalized });
   };
 
-  const refresh = async (): Promise<GeolocationSnapshot> => {
+  const refreshEffect = (): Effect.Effect<GeolocationSnapshot, never, never> => {
     if (!geolocation) {
       onFailure(new Error("Geolocation API is not available"));
-      return store.getSnapshot();
+      return Effect.succeed(store.getSnapshot());
     }
 
-    await new Promise<void>((resolve) => {
+    return Effect.async<GeolocationSnapshot>((resume) => {
       geolocation.getCurrentPosition(
         (position) => {
           onSuccess(position);
-          resolve();
+          resume(Effect.succeed(store.getSnapshot()));
         },
         (error) => {
           onFailure(error);
-          resolve();
+          resume(Effect.succeed(store.getSnapshot()));
         },
         options.positionOptions,
       );
+      return Effect.void;
     });
-
-    return store.getSnapshot();
   };
 
   const start = () => {
@@ -145,7 +160,7 @@ export const createGeolocationSource = (
   return {
     getSnapshot: () => store.getSnapshot(),
     subscribe: (listener) => store.subscribe(listener),
-    refresh,
+    refresh: () => runEffectWithSquashedCause(refreshEffect()),
     start,
   };
 };
@@ -170,41 +185,46 @@ export const createPermissionsSource = (
     options.permissions ?? (typeof navigator === "undefined" ? undefined : navigator.permissions);
   const store = createSource<PermissionStateSnapshot>({ states: {}, error: null });
 
-  const query = async (name: PermissionName): Promise<PermissionState> => {
+  const queryEffect = (name: PermissionName): Effect.Effect<PermissionState, Error, never> => {
     if (!permissions) {
       const error = new Error("Permissions API is not available");
       store.setSnapshot({ states: store.getSnapshot().states, error });
-      throw error;
+      return Effect.fail(error);
     }
 
-    try {
-      const status = await permissions.query({ name });
-      const onChange = () => {
-        const current = store.getSnapshot();
-        store.setSnapshot({
-          states: {
-            ...current.states,
-            [name]: status.state,
-          },
-          error: null,
-        });
-      };
-      status.addEventListener("change", onChange);
+    return Effect.tryPromise({
+      try: () => permissions.query({ name }),
+      catch: normalizeError,
+    }).pipe(
+      Effect.tap((status) =>
+        Effect.sync(() => {
+          const onChange = () => {
+            const current = store.getSnapshot();
+            store.setSnapshot({
+              states: {
+                ...current.states,
+                [name]: status.state,
+              },
+              error: null,
+            });
+          };
+          status.addEventListener("change", onChange);
 
-      const current = store.getSnapshot();
-      store.setSnapshot({
-        states: {
-          ...current.states,
-          [name]: status.state,
-        },
-        error: null,
-      });
-      return status.state;
-    } catch (error) {
-      const normalized = error instanceof Error ? error : new Error(String(error));
-      store.setSnapshot({ states: store.getSnapshot().states, error: normalized });
-      throw normalized;
-    }
+          const current = store.getSnapshot();
+          store.setSnapshot({
+            states: {
+              ...current.states,
+              [name]: status.state,
+            },
+            error: null,
+          });
+        }),
+      ),
+      Effect.map((status) => status.state),
+      Effect.tapError((error) =>
+        Effect.sync(() => store.setSnapshot({ states: store.getSnapshot().states, error })),
+      ),
+    );
   };
 
   return {
@@ -215,8 +235,8 @@ export const createPermissionsSource = (
         unsubscribe();
       };
     },
-    refresh: async () => store.getSnapshot(),
-    query,
+    refresh: () => runEffectWithSquashedCause(Effect.sync(() => store.getSnapshot())),
+    query: (name) => runEffectWithSquashedCause(queryEffect(name)),
   };
 };
 
@@ -239,11 +259,12 @@ export const createNetworkStatusSource = (
   const initial = target?.navigator.onLine ?? true;
   const store = createSource<NetworkStatusSnapshot>({ online: initial });
 
-  const refresh = async (): Promise<NetworkStatusSnapshot> => {
-    const online = target?.navigator.onLine ?? store.getSnapshot().online;
-    store.setSnapshot({ online });
-    return store.getSnapshot();
-  };
+  const refreshEffect = (): Effect.Effect<NetworkStatusSnapshot, never, never> =>
+    Effect.sync(() => {
+      const online = target?.navigator.onLine ?? store.getSnapshot().online;
+      store.setSnapshot({ online });
+      return store.getSnapshot();
+    });
 
   return {
     getSnapshot: () => store.getSnapshot(),
@@ -267,7 +288,7 @@ export const createNetworkStatusSource = (
         unsubscribe();
       };
     },
-    refresh,
+    refresh: () => runEffectWithSquashedCause(refreshEffect()),
   };
 };
 
@@ -286,11 +307,12 @@ export const createVisibilitySource = (options: VisibilitySourceOptions = {}): V
   const initial = target?.visibilityState ?? "visible";
   const store = createSource<VisibilitySnapshot>({ visibilityState: initial });
 
-  const refresh = async (): Promise<VisibilitySnapshot> => {
-    const next = target?.visibilityState ?? store.getSnapshot().visibilityState;
-    store.setSnapshot({ visibilityState: next });
-    return store.getSnapshot();
-  };
+  const refreshEffect = (): Effect.Effect<VisibilitySnapshot, never, never> =>
+    Effect.sync(() => {
+      const next = target?.visibilityState ?? store.getSnapshot().visibilityState;
+      store.setSnapshot({ visibilityState: next });
+      return store.getSnapshot();
+    });
 
   return {
     getSnapshot: () => store.getSnapshot(),
@@ -309,6 +331,6 @@ export const createVisibilitySource = (options: VisibilitySourceOptions = {}): V
         unsubscribe();
       };
     },
-    refresh,
+    refresh: () => runEffectWithSquashedCause(refreshEffect()),
   };
 };

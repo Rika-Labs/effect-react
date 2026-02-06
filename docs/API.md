@@ -22,6 +22,7 @@ Complete API reference for `@rika-labs/effect-react`.
 - [Optimistic](#optimistic)
 - [Persistence](#persistence)
 - [SSR](#ssr)
+- [Framework + CLI](#framework--cli)
 - [Devtools](#devtools)
 - [Internal Utilities](#internal-utilities)
 
@@ -1588,6 +1589,108 @@ ssr.hydrate(cache, dehydratedState);
 
 ---
 
+### `ssr.dehydrateFrameworkState(options)` / `ssr.hydrateFrameworkState(options)`
+
+Framework hydration protocol helpers that combine query dehydration with router loader snapshot state.
+
+`dehydrateFrameworkState` options:
+
+| Option        | Type                  | Required | Description                    |
+| ------------- | --------------------- | -------- | ------------------------------ |
+| `cache`       | `QueryCache`          | Yes      | Query cache to serialize       |
+| `loaderState` | `RouteLoaderSnapshot` | No       | Optional route loader snapshot |
+
+`hydrateFrameworkState` options:
+
+| Option  | Type                      | Required | Description               |
+| ------- | ------------------------- | -------- | ------------------------- |
+| `cache` | `QueryCache`              | Yes      | Query cache to hydrate    |
+| `state` | `FrameworkHydrationState` | Yes      | Framework hydration state |
+
+**Returns:**
+
+- `dehydrateFrameworkState` => `FrameworkHydrationState`
+- `hydrateFrameworkState` => `RouteLoaderSnapshot`
+
+---
+
+### `ssr.createFrameworkHydrationScript(state, globalName?)`
+
+Creates a browser-safe inline hydration script payload for framework state.
+
+| Parameter    | Type                      | Description                                             |
+| ------------ | ------------------------- | ------------------------------------------------------- |
+| `state`      | `FrameworkHydrationState` | Framework hydration state                               |
+| `globalName` | `string`                  | Optional global name (default `__EFFECT_REACT_STATE__`) |
+
+---
+
+### `ssr.parseFrameworkHydrationState(text)`
+
+Parses serialized framework hydration state and validates envelope shape.
+
+**Returns:** `FrameworkHydrationState | undefined`
+
+---
+
+### `createServerHydrationScript(options)` (server module)
+
+Server-side helper that combines query + route-loader state and returns a script assignment string.
+
+| Option        | Type                  | Required | Description                       |
+| ------------- | --------------------- | -------- | --------------------------------- |
+| `cache`       | `QueryCache`          | Yes      | Query cache to serialize          |
+| `loaderState` | `RouteLoaderSnapshot` | No       | Optional route loader snapshot    |
+| `globalName`  | `string`              | No       | Optional global variable override |
+
+**Returns:** `string`
+
+---
+
+## Framework + CLI
+
+### `effectReactVitePlugin(options?)`
+
+Vite plugin that discovers route and action modules and exposes:
+
+- `virtual:effect-react/routes`
+- `virtual:effect-react/actions`
+
+### `defineApp(options)`
+
+Composes runtime routes/actions/loaders and returns:
+
+- `router`
+- `createServerHandler()`
+- `createActionTransport()`
+- `createSsrHandler()`
+
+### `defineAppFromManifest(options)`
+
+Builds an app from discovered action manifests.
+
+### `defineAppFromManifests(options)`
+
+Builds an app from discovered route + action manifests.
+
+### `createSsrHandler(options)`
+
+Framework SSR request pipeline:
+
+1. Match route chain
+2. Run loaders
+3. Render React element from Effect
+4. Inject framework hydration payload into HTML/stream response
+
+### CLI commands
+
+- `effect-react new <name>`
+- `effect-react dev`
+- `effect-react build`
+- `effect-react start`
+
+---
+
 ## Devtools
 
 ### `snapshotQueryCache(cache)`
@@ -1646,6 +1749,108 @@ const snapshot = snapshotQueryCache(cache);
 const summary = summarizeQueryDiagnostics(snapshot);
 console.log(`Cache: ${summary.total} entries, ${summary.stale} stale`);
 ```
+
+---
+
+## Full-Stack Framework APIs
+
+### `defineAppFromManifest(options)`
+
+Builds an app using server action entries discovered from a manifest module (for example, the Vite virtual actions module).
+
+| Option           | Type                         | Description                           |
+| ---------------- | ---------------------------- | ------------------------------------- |
+| `manifestModule` | `ServerActionManifestModule` | Module with `actionManifest` + loader |
+| `runtime`        | `AnyManagedRuntime`          | Effect runtime                        |
+| `routes`         | `readonly AnyRoute[]`        | Route definitions                     |
+| `history`        | `RouterHistory`              | Optional custom history               |
+| `handlers`       | `readonly RouteHandler[]`    | Optional route handlers               |
+| `loaders`        | `readonly AnyRouteLoader[]`  | Optional app loaders                  |
+| `middlewares`    | `readonly RouteMiddleware[]` | Optional route middlewares            |
+
+**Returns:** `Effect<EffectApp<...>, Error, never>`
+
+---
+
+### `defineAppFromManifests(options)`
+
+Builds an app from both route and server-action manifests.
+
+| Option                 | Type                         | Description                                         |
+| ---------------------- | ---------------------------- | --------------------------------------------------- |
+| `runtime`              | `AnyManagedRuntime`          | Effect runtime                                      |
+| `actionManifestModule` | `ServerActionManifestModule` | Module with discovered server actions               |
+| `routeManifestModule`  | `RouteManifestModule`        | Module with discovered routes + route module loader |
+| `handlers`             | `readonly RouteHandler[]`    | Optional route handlers                             |
+| `loaders`              | `readonly AnyRouteLoader[]`  | Optional explicit loaders (override same route ids) |
+| `middlewares`          | `readonly RouteMiddleware[]` | Optional route middlewares                          |
+| `history`              | `RouterHistory`              | Optional custom history                             |
+| `actionBasePath`       | `string`                     | Optional server action base path                    |
+
+**Returns:** `Effect<EffectApp<readonly AnyRoute[], readonly AnyServerAction[]>, ManifestAppError, never>`
+
+---
+
+### `effectReactVitePlugin(options?)`
+
+Vite plugin that provides framework virtual modules and server-action call transforms.
+
+Virtual module IDs:
+
+- `virtual:effect-react/routes`
+- `virtual:effect-react/actions`
+
+---
+
+### `createRouteRequestHandlerEffect(runtime, handlers, options?)`
+
+Effect-native route handler pipeline. Returns a function that maps `Request -> Effect<Response, never, never>`.
+
+Use `createRouteRequestHandler(...)` when you need a Promise boundary adapter.
+
+---
+
+### `createServerActionHttpHandlerEffect(options)` / `createRequestScopedServerActionHttpHandlerEffect(options)`
+
+Effect-native server-action HTTP handlers. They return `Request -> Effect<Response, never, never>`.
+
+Use `createServerActionHttpHandler(...)` or `createRequestScopedServerActionHttpHandler(...)` for Promise-boundary adapters.
+
+---
+
+### `createRequestPipeline(options)`
+
+Unified full-stack request pipeline with both Effect-native and Promise interfaces.
+
+`RequestPipeline` includes:
+
+- `handleEffect(request)` -> `Effect<Response, never, never>`
+- `handle(request)` -> `Promise<Response>`
+- `actionBasePath` -> normalized action endpoint prefix
+
+---
+
+### `createServerHydrationScript(options)`
+
+Server helper that serializes framework hydration payload (query state + route loader snapshot) to an inline browser script assignment.
+
+| Option        | Type                  | Required | Description                    |
+| ------------- | --------------------- | -------- | ------------------------------ |
+| `cache`       | `QueryCache`          | Yes      | Query cache to serialize       |
+| `loaderState` | `RouteLoaderSnapshot` | No       | Route loader snapshot          |
+| `globalName`  | `string`              | No       | Override global state variable |
+
+**Returns:** `string`
+
+---
+
+### Router Loader Hooks
+
+- `useRouteLoadersPending()` -> `boolean`
+- `useRouteLoaderState(route)` -> `RouteLoaderSnapshotEntry | undefined`
+- `useRevalidateRouteLoaders()` -> `() => Promise<void>`
+
+These hooks expose loader lifecycle state and revalidation controls from router snapshots.
 
 ---
 

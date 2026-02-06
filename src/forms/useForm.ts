@@ -1,4 +1,4 @@
-import { Effect, Either, Exit, ParseResult, Schema } from "effect";
+import { Cause, Effect, Either, Exit, ParseResult, Schema } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { runEffect, type EffectRunHandle } from "../internal/effectRunner";
 import { getNestedValue, setNestedValue } from "../internal/pathUtils";
@@ -124,6 +124,37 @@ const parseErrorToFormErrors = <T extends Record<string, unknown>>(
   return errors as FormErrors<T>;
 };
 
+const isPromiseLike = <A>(value: unknown): value is PromiseLike<A> =>
+  typeof value === "object" &&
+  value !== null &&
+  "then" in value &&
+  typeof (value as { readonly then?: unknown }).then === "function";
+
+const fromMaybePromiseEffect = <A>(
+  thunk: () => A | PromiseLike<A>,
+): Effect.Effect<A, unknown, never> =>
+  Effect.try({
+    try: thunk,
+    catch: (cause) => cause,
+  }).pipe(
+    Effect.flatMap((value) =>
+      isPromiseLike<A>(value)
+        ? Effect.tryPromise({
+            try: () => value,
+            catch: (cause) => cause,
+          })
+        : Effect.succeed(value),
+    ),
+  );
+
+const runEffectWithSquashedCause = <A>(effect: Effect.Effect<A, unknown, never>): Promise<A> =>
+  Effect.runPromiseExit(effect).then((exit) => {
+    if (Exit.isSuccess(exit)) {
+      return exit.value;
+    }
+    throw Cause.squash(exit.cause);
+  });
+
 export const useForm = <T extends Record<string, unknown>>(
   options: UseFormOptions<T>,
 ): UseFormResult<T> => {
@@ -190,44 +221,57 @@ export const useForm = <T extends Record<string, unknown>>(
     }));
   }, []);
 
-  const runValidateForm = useCallback(async (): Promise<FormErrors<T>> => {
+  const runValidateFormEffect = useCallback((): Effect.Effect<FormErrors<T>, unknown, never> => {
     if (!effectiveValidate) {
-      return {};
+      return Effect.succeed({});
     }
-    return await Promise.resolve(effectiveValidate(valuesRef.current));
+    return fromMaybePromiseEffect(() => effectiveValidate(valuesRef.current));
   }, [effectiveValidate]);
 
-  const validateFormFn = useCallback(async (): Promise<boolean> => {
-    const nextErrors = await runValidateForm();
-    setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
-  }, [runValidateForm]);
+  const validateFormFn = useCallback(
+    (): Promise<boolean> =>
+      runEffectWithSquashedCause(
+        runValidateFormEffect().pipe(
+          Effect.tap((nextErrors) =>
+            Effect.sync(() => {
+              setErrors(nextErrors);
+            }),
+          ),
+          Effect.map((nextErrors) => Object.keys(nextErrors).length === 0),
+        ),
+      ),
+    [runValidateFormEffect],
+  );
 
   const validateFieldFn = useCallback(
-    async <K extends keyof T>(field: K): Promise<boolean> => {
-      const currentRunId = (fieldValidationRunRef.current.get(field) ?? 0) + 1;
-      fieldValidationRunRef.current.set(field, currentRunId);
+    <K extends keyof T>(field: K): Promise<boolean> =>
+      runEffectWithSquashedCause(
+        Effect.gen(function* () {
+          const currentRunId = (fieldValidationRunRef.current.get(field) ?? 0) + 1;
+          fieldValidationRunRef.current.set(field, currentRunId);
 
-      const currentValues = valuesRef.current;
-      const nextError = await (async (): Promise<string | undefined> => {
-        if (validateField) {
-          return await Promise.resolve(validateField(field, currentValues[field], currentValues));
-        }
-        if (effectiveValidate) {
-          const allErrors = await runValidateForm();
-          return allErrors[field as string];
-        }
-        return undefined;
-      })();
+          const currentValues = valuesRef.current;
+          const nextError = yield* validateField
+            ? fromMaybePromiseEffect(() =>
+                validateField(field, currentValues[field], currentValues),
+              )
+            : effectiveValidate
+              ? runValidateFormEffect().pipe(
+                  Effect.map((allErrors) => allErrors[field as string] as string | undefined),
+                )
+              : Effect.succeed<string | undefined>(undefined);
 
-      if (fieldValidationRunRef.current.get(field) !== currentRunId) {
-        return false;
-      }
+          if (fieldValidationRunRef.current.get(field) !== currentRunId) {
+            return false;
+          }
 
-      setErrors((previous) => setErrorForField(previous, String(field), nextError));
-      return nextError === undefined;
-    },
-    [runValidateForm, effectiveValidate, validateField],
+          yield* Effect.sync(() => {
+            setErrors((previous) => setErrorForField(previous, String(field), nextError));
+          });
+          return nextError === undefined;
+        }),
+      ),
+    [effectiveValidate, runValidateFormEffect, validateField],
   );
 
   const submit = useCallback(async (): Promise<boolean> => {
@@ -255,7 +299,7 @@ export const useForm = <T extends Record<string, unknown>>(
         submitHandleRef.current = null;
         return Exit.isSuccess(exit);
       }
-      await Promise.resolve(submitResult);
+      await runEffectWithSquashedCause(fromMaybePromiseEffect(() => submitResult));
       if (submitRunIdRef.current !== runId) {
         return false;
       }

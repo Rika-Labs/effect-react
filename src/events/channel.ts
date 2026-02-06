@@ -103,16 +103,19 @@ export const createEventChannel = <Events extends object>(
     });
   };
 
-  const once = <K extends keyof Events>(type: K): Promise<Events[K]> =>
-    new Promise<Events[K]>((resolve) => {
+  const nextEffect = <K extends keyof Events>(type: K): EffectType.Effect<Events[K]> =>
+    Effect.async<Events[K]>((resume) => {
       const unsubscribe = subscribe(type, (payload) => {
         unsubscribe();
-        resolve(payload);
+        resume(Effect.succeed(payload));
+      });
+      return Effect.sync(() => {
+        unsubscribe();
       });
     });
 
-  const nextEffect = <K extends keyof Events>(type: K): EffectType.Effect<Events[K]> =>
-    Effect.promise(() => once(type));
+  const once = <K extends keyof Events>(type: K): Promise<Events[K]> =>
+    Effect.runPromise(nextEffect(type));
 
   const clear = (type?: keyof Events): void => {
     if (type !== undefined) {

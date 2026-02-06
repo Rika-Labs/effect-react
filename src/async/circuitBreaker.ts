@@ -1,4 +1,4 @@
-import { Effect, type Effect as EffectType } from "effect";
+import { Cause, Effect, Exit, type Effect as EffectType } from "effect";
 import { toMillis, type DurationInput } from "../internal/duration";
 
 export type CircuitState = "closed" | "open" | "half-open";
@@ -77,19 +77,34 @@ export const createCircuitBreaker = (options: CircuitBreakerOptions): CircuitBre
     }
   };
 
-  const execute = async <A>(task: () => Promise<A>): Promise<A> => {
+  const runEffectWithSquashedCause = <A>(
+    effect: EffectType.Effect<A, unknown, never>,
+  ): Promise<A> =>
+    Effect.runPromiseExit(effect).then((exit) => {
+      if (Exit.isSuccess(exit)) {
+        return exit.value;
+      }
+      throw Cause.squash(exit.cause);
+    });
+
+  const executePromiseEffect = <A>(
+    task: () => Promise<A>,
+  ): EffectType.Effect<A, unknown, never> => {
     if (currentState === "open") {
-      throw new CircuitOpenError();
+      return Effect.fail(new CircuitOpenError()) as EffectType.Effect<A, unknown, never>;
     }
-    try {
-      const result = await task();
-      recordSuccess();
-      return result;
-    } catch (error) {
-      recordFailure();
-      throw error;
-    }
+
+    return Effect.tryPromise({
+      try: task,
+      catch: (cause) => cause,
+    }).pipe(
+      Effect.tap(() => Effect.sync(() => recordSuccess())),
+      Effect.tapErrorCause(() => Effect.sync(() => recordFailure())),
+    ) as EffectType.Effect<A, unknown, never>;
   };
+
+  const execute = <A>(task: () => Promise<A>): Promise<A> =>
+    runEffectWithSquashedCause(executePromiseEffect(task));
 
   const executeEffect = <A, E, R>(
     effect: EffectType.Effect<A, E, R>,

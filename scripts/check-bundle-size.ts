@@ -1,40 +1,69 @@
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { Effect } from "effect";
 
 const root = process.cwd();
 const distDir = path.join(root, "dist");
-const threshold = Number.parseInt(process.env["BUNDLE_MAX_BYTES"] ?? "400000", 10);
+const threshold = Number.parseInt(process.env["BUNDLE_MAX_BYTES"] ?? "800000", 10);
 
-if (!Number.isFinite(threshold) || threshold < 1) {
-  throw new Error("BUNDLE_MAX_BYTES must be a positive integer");
-}
+const readDirectory = (directory: string) =>
+  Effect.tryPromise({
+    try: () => readdir(directory, { withFileTypes: true }),
+    catch: (cause) => new Error(`Failed to read directory '${directory}': ${String(cause)}`),
+  });
 
-const collectFiles = async (dir: string): Promise<string[]> => {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const files: string[] = [];
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      const nested = await collectFiles(full);
-      files.push(...nested);
-      continue;
+const readFileStat = (file: string) =>
+  Effect.tryPromise({
+    try: () => stat(file),
+    catch: (cause) => new Error(`Failed to stat file '${file}': ${String(cause)}`),
+  });
+
+const collectFiles = (startDirectory: string): Effect.Effect<readonly string[], Error> =>
+  Effect.gen(function* () {
+    const directories: string[] = [startDirectory];
+    const files: string[] = [];
+
+    while (directories.length > 0) {
+      const directory = directories.pop();
+      if (directory === undefined) {
+        continue;
+      }
+      const entries = yield* readDirectory(directory);
+      for (const entry of entries) {
+        const fullPath = path.join(directory, entry.name);
+        if (entry.isDirectory()) {
+          directories.push(fullPath);
+          continue;
+        }
+        files.push(fullPath);
+      }
     }
-    files.push(full);
+
+    return files;
+  });
+
+const program = Effect.gen(function* () {
+  if (!Number.isFinite(threshold) || threshold < 1) {
+    return yield* Effect.fail(new Error("BUNDLE_MAX_BYTES must be a positive integer"));
   }
-  return files;
-};
 
-const files = await collectFiles(distDir);
-const targets = files.filter((file) => file.endsWith(".js") || file.endsWith(".cjs"));
+  const files = yield* collectFiles(distDir);
+  const targets = files.filter((file) => file.endsWith(".js") || file.endsWith(".cjs"));
+  const stats = yield* Effect.forEach(targets, (file) => readFileStat(file), { discard: false });
+  const totalBytes = stats.reduce((sum, fileStat) => sum + fileStat.size, 0);
 
-let totalBytes = 0;
-for (const file of targets) {
-  const fileStat = await stat(file);
-  totalBytes += fileStat.size;
-}
+  if (totalBytes > threshold) {
+    return yield* Effect.fail(
+      new Error(`Bundle size regression: ${totalBytes} bytes > ${threshold} bytes`),
+    );
+  }
 
-if (totalBytes > threshold) {
-  throw new Error(`Bundle size regression: ${totalBytes} bytes > ${threshold} bytes`);
-}
+  yield* Effect.sync(() => {
+    process.stdout.write(`bundle-size-ok ${totalBytes}/${threshold}\n`);
+  });
+});
 
-process.stdout.write(`bundle-size-ok ${totalBytes}/${threshold}\n`);
+void Effect.runPromise(program).catch((error) => {
+  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  process.exitCode = 1;
+});

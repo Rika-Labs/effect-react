@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Effect } from "effect";
+import { Cause, Effect } from "effect";
 import { useRuntime } from "../provider/useRuntime";
 import { useQueryCache } from "./context";
 import type { QueryEntry } from "./QueryCache";
@@ -9,6 +9,9 @@ import type {
   QueryResult,
   UseInfiniteQueryOptions,
 } from "./types";
+
+const runEffectWithSquashedCause = <A>(effect: Effect.Effect<A, unknown, never>): Promise<A> =>
+  Effect.runPromise(effect.pipe(Effect.catchAllCause((cause) => Effect.fail(Cause.squash(cause)))));
 
 export const useInfiniteQuery = <A, E, R, P = unknown>(
   options: UseInfiniteQueryOptions<A, E, R, P>,
@@ -48,24 +51,29 @@ export const useInfiniteQuery = <A, E, R, P = unknown>(
 
   const [fetchingDirection, setFetchingDirection] = useState<"none" | "next" | "previous">("none");
 
-  const runInitialFetch = useCallback(async () => {
-    const effect = query({ pageParam: initialPageParam });
-    await cache.fetch({
-      entry: entry as QueryEntry<InfiniteData<A, P>, E>,
-      key,
-      query: Effect.map(
-        effect,
-        (page): InfiniteData<A, P> => ({
-          pages: [page],
-          pageParams: [initialPageParam],
-        }),
+  const runInitialFetch = useCallback(
+    (): Promise<void> =>
+      runEffectWithSquashedCause(
+        cache
+          .fetchEffect({
+            entry: entry as QueryEntry<InfiniteData<A, P>, E>,
+            key,
+            query: Effect.map(
+              query({ pageParam: initialPageParam }),
+              (page): InfiniteData<A, P> => ({
+                pages: [page],
+                pageParams: [initialPageParam],
+              }),
+            ),
+            runtime,
+            ...(staleTime !== undefined ? { staleTime } : {}),
+            ...(gcTime !== undefined ? { gcTime } : {}),
+            ...(keyHasher !== undefined ? { keyHasher } : {}),
+          })
+          .pipe(Effect.asVoid),
       ),
-      runtime,
-      ...(staleTime !== undefined ? { staleTime } : {}),
-      ...(gcTime !== undefined ? { gcTime } : {}),
-      ...(keyHasher !== undefined ? { keyHasher } : {}),
-    });
-  }, [cache, entry, gcTime, initialPageParam, key, keyHasher, query, runtime, staleTime]);
+    [cache, entry, gcTime, initialPageParam, key, keyHasher, query, runtime, staleTime],
+  );
 
   useEffect(() => {
     if (!enabled) return;
@@ -94,88 +102,126 @@ export const useInfiniteQuery = <A, E, R, P = unknown>(
     return param !== undefined && param !== null;
   }, [currentData, getPreviousPageParam]);
 
-  const fetchNextPage = useCallback(async () => {
-    if (!currentData || currentData.pages.length === 0) return;
-    const lastPage = currentData.pages[currentData.pages.length - 1] as A | undefined;
-    if (lastPage === undefined) return;
-    const nextParam = getNextPageParam(lastPage, currentData.pages);
-    if (nextParam === undefined || nextParam === null) return;
+  const fetchNextPage = useCallback(
+    (): Promise<void> =>
+      runEffectWithSquashedCause(
+        Effect.gen(function* () {
+          if (!currentData || currentData.pages.length === 0) {
+            return;
+          }
+          const lastPage = currentData.pages[currentData.pages.length - 1] as A | undefined;
+          if (lastPage === undefined) {
+            return;
+          }
+          const nextParam = getNextPageParam(lastPage, currentData.pages);
+          if (nextParam === undefined || nextParam === null) {
+            return;
+          }
 
-    setFetchingDirection("next");
-    const effect = query({ pageParam: nextParam });
-    await cache.fetch({
-      entry: entry as QueryEntry<InfiniteData<A, P>, E>,
-      key,
-      query: Effect.map(
-        effect,
-        (page): InfiniteData<A, P> => ({
-          pages: [...currentData.pages, page],
-          pageParams: [...currentData.pageParams, nextParam],
-        }),
+          yield* Effect.sync(() => {
+            setFetchingDirection("next");
+          });
+          yield* cache.fetchEffect({
+            entry: entry as QueryEntry<InfiniteData<A, P>, E>,
+            key,
+            query: Effect.map(
+              query({ pageParam: nextParam }),
+              (page): InfiniteData<A, P> => ({
+                pages: [...currentData.pages, page],
+                pageParams: [...currentData.pageParams, nextParam],
+              }),
+            ),
+            runtime,
+            force: true,
+            ...(staleTime !== undefined ? { staleTime } : {}),
+            ...(gcTime !== undefined ? { gcTime } : {}),
+            ...(keyHasher !== undefined ? { keyHasher } : {}),
+          });
+        }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              setFetchingDirection("none");
+            }),
+          ),
+          Effect.asVoid,
+        ),
       ),
-      runtime,
-      force: true,
-      ...(staleTime !== undefined ? { staleTime } : {}),
-      ...(gcTime !== undefined ? { gcTime } : {}),
-      ...(keyHasher !== undefined ? { keyHasher } : {}),
-    });
-    setFetchingDirection("none");
-  }, [
-    cache,
-    currentData,
-    entry,
-    gcTime,
-    getNextPageParam,
-    key,
-    keyHasher,
-    query,
-    runtime,
-    staleTime,
-  ]);
-
-  const fetchPreviousPage = useCallback(async () => {
-    if (!currentData || currentData.pages.length === 0) return;
-    if (!getPreviousPageParam) return;
-    const firstPage = currentData.pages[0] as A | undefined;
-    if (firstPage === undefined) return;
-    const prevParam = getPreviousPageParam(firstPage, currentData.pages);
-    if (prevParam === undefined || prevParam === null) return;
-
-    setFetchingDirection("previous");
-    const effect = query({ pageParam: prevParam });
-    await cache.fetch({
-      entry: entry as QueryEntry<InfiniteData<A, P>, E>,
+    [
+      cache,
+      currentData,
+      entry,
+      gcTime,
+      getNextPageParam,
       key,
-      query: Effect.map(
-        effect,
-        (page): InfiniteData<A, P> => ({
-          pages: [page, ...currentData.pages],
-          pageParams: [prevParam, ...currentData.pageParams],
-        }),
-      ),
+      keyHasher,
+      query,
       runtime,
-      force: true,
-      ...(staleTime !== undefined ? { staleTime } : {}),
-      ...(gcTime !== undefined ? { gcTime } : {}),
-      ...(keyHasher !== undefined ? { keyHasher } : {}),
-    });
-    setFetchingDirection("none");
-  }, [
-    cache,
-    currentData,
-    entry,
-    gcTime,
-    getPreviousPageParam,
-    key,
-    keyHasher,
-    query,
-    runtime,
-    staleTime,
-  ]);
+      staleTime,
+    ],
+  );
 
-  const refetch = useCallback(async () => {
-    await runInitialFetch();
-  }, [runInitialFetch]);
+  const fetchPreviousPage = useCallback(
+    (): Promise<void> =>
+      runEffectWithSquashedCause(
+        Effect.gen(function* () {
+          if (!currentData || currentData.pages.length === 0) {
+            return;
+          }
+          if (!getPreviousPageParam) {
+            return;
+          }
+          const firstPage = currentData.pages[0] as A | undefined;
+          if (firstPage === undefined) {
+            return;
+          }
+          const prevParam = getPreviousPageParam(firstPage, currentData.pages);
+          if (prevParam === undefined || prevParam === null) {
+            return;
+          }
+
+          yield* Effect.sync(() => {
+            setFetchingDirection("previous");
+          });
+          yield* cache.fetchEffect({
+            entry: entry as QueryEntry<InfiniteData<A, P>, E>,
+            key,
+            query: Effect.map(
+              query({ pageParam: prevParam }),
+              (page): InfiniteData<A, P> => ({
+                pages: [page, ...currentData.pages],
+                pageParams: [prevParam, ...currentData.pageParams],
+              }),
+            ),
+            runtime,
+            force: true,
+            ...(staleTime !== undefined ? { staleTime } : {}),
+            ...(gcTime !== undefined ? { gcTime } : {}),
+            ...(keyHasher !== undefined ? { keyHasher } : {}),
+          });
+        }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              setFetchingDirection("none");
+            }),
+          ),
+          Effect.asVoid,
+        ),
+      ),
+    [
+      cache,
+      currentData,
+      entry,
+      gcTime,
+      getPreviousPageParam,
+      key,
+      keyHasher,
+      query,
+      runtime,
+      staleTime,
+    ],
+  );
+
+  const refetch = useCallback(() => runInitialFetch(), [runInitialFetch]);
 
   const invalidate = useCallback(() => {
     cache.invalidate(key, keyHasher ?? cache.keyHasher);

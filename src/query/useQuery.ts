@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
-import type { Effect } from "effect";
+import { Cause, Effect } from "effect";
 import { useRuntime } from "../provider/useRuntime";
 import { useQueryCache } from "./context";
 import { onWindowFocus, onWindowReconnect } from "./focus";
@@ -8,6 +8,9 @@ import type { QueryResult, UseQueryOptions, UseQueryResult } from "./types";
 const resolveQueryEffect = <A, E, R>(
   query: Effect.Effect<A, E, R> | (() => Effect.Effect<A, E, R>),
 ): Effect.Effect<A, E, R> => (typeof query === "function" ? query() : query);
+
+const runEffectWithSquashedCause = <A>(effect: Effect.Effect<A, unknown, never>): Promise<A> =>
+  Effect.runPromise(effect.pipe(Effect.catchAllCause((cause) => Effect.fail(Cause.squash(cause)))));
 
 export const useQuery = <A, E, R, S = A>(
   options: UseQueryOptions<A, E, R, S>,
@@ -50,21 +53,24 @@ export const useQuery = <A, E, R, S = A>(
   const initialFetchHashRef = useRef<string | null>(null);
 
   const runFetch = useCallback(
-    async (force = false) => {
-      await cache.fetch({
-        entry,
-        key,
-        query: resolveQueryEffect(query),
-        runtime,
-        force,
-        ...(staleTime !== undefined ? { staleTime } : {}),
-        ...(gcTime !== undefined ? { gcTime } : {}),
-        ...(keyHasher !== undefined ? { keyHasher } : {}),
-        ...(options.structuralSharing !== undefined
-          ? { structuralSharing: options.structuralSharing }
-          : {}),
-      });
-    },
+    (force = false): Promise<void> =>
+      runEffectWithSquashedCause(
+        cache
+          .fetchEffect({
+            entry,
+            key,
+            query: resolveQueryEffect(query),
+            runtime,
+            force,
+            ...(staleTime !== undefined ? { staleTime } : {}),
+            ...(gcTime !== undefined ? { gcTime } : {}),
+            ...(keyHasher !== undefined ? { keyHasher } : {}),
+            ...(options.structuralSharing !== undefined
+              ? { structuralSharing: options.structuralSharing }
+              : {}),
+          })
+          .pipe(Effect.asVoid),
+      ),
     [cache, entry, gcTime, key, keyHasher, options.structuralSharing, query, runtime, staleTime],
   );
 
@@ -142,9 +148,7 @@ export const useQuery = <A, E, R, S = A>(
     [data, snapshot, usePlaceholderSurface],
   );
 
-  const refetch = useCallback(async () => {
-    await runFetch(true);
-  }, [runFetch]);
+  const refetch = useCallback(() => runFetch(true), [runFetch]);
 
   const invalidate = useCallback(() => {
     cache.invalidate(key, keyHasher ?? cache.keyHasher);
