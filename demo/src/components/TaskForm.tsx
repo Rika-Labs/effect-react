@@ -4,19 +4,18 @@ import { createTask } from "../api";
 
 export function TaskForm() {
   const mutation = useMutation({
-    mutation: (data: { title: string; description: string; priority: string }) =>
-      createTask(data),
+    mutation: (data: { title: string; description: string; priority: string }) => createTask(data),
     invalidate: [["tasks"]],
   });
 
   const form = useForm({
     initialValues: { title: "", description: "", priority: "medium" },
-    validate: (values) => {
+    validate: (values: { title: string; description: string; priority: string }) => {
       const errors: Record<string, string> = {};
       if (values.title.trim().length === 0) errors.title = "Title is required";
       return errors;
     },
-    onSubmit: async (values) => {
+    onSubmit: async (values: { title: string; description: string; priority: string }) => {
       await mutation.mutate(values);
       form.reset();
     },
@@ -41,9 +40,7 @@ export function TaskForm() {
         border: "1px solid #334155",
       }}
     >
-      <h2 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: "0.75rem" }}>
-        New Task
-      </h2>
+      <h2 style={{ fontSize: "1rem", fontWeight: 600, marginBottom: "0.75rem" }}>New Task</h2>
       <form
         onSubmit={(e) => {
           e.preventDefault();

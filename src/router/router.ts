@@ -1,4 +1,5 @@
 import { createExternalStore, type ExternalStore } from "../internal/externalStore";
+import { runEffect, type EffectRunHandle } from "../internal/effectRunner";
 import { Effect } from "effect";
 import {
   createPendingRouteLoaderSnapshot,
@@ -52,6 +53,7 @@ export interface Router<TRoutes extends readonly AnyRoute[]> {
   ) => void;
   readonly match: <TRoute extends TRoutes[number]>(route: TRoute) => RouteLocation<TRoute> | null;
   readonly revalidate: (options?: { readonly signal?: AbortSignal }) => Promise<void>;
+  readonly dispose: () => void;
 }
 
 interface BrowserLike {
@@ -286,6 +288,7 @@ export const createRouter = <TRoutes extends readonly AnyRoute[]>(
   let loadersPending = false;
   let activeLoaderController: AbortController | null = null;
   let activeLoaderRun = 0;
+  let activeLoaderHandle: EffectRunHandle<void, never> | null = null;
 
   const store: ExternalStore<RouterSnapshot<TRoutes>> = createExternalStore(
     createSnapshot(options.routes, history.location, loaderState, loadersPending),
@@ -347,15 +350,22 @@ export const createRouter = <TRoutes extends readonly AnyRoute[]>(
       syncSnapshot();
     });
 
-  const runLoaders = (runOptions?: { readonly signal?: AbortSignal }): Promise<void> =>
-    Effect.runPromise(runLoadersEffect(runOptions));
+  const runLoaders = (runOptions?: { readonly signal?: AbortSignal }): Promise<void> => {
+    activeLoaderHandle?.cancel();
+    if (runtime !== undefined) {
+      const handle = runEffect(runtime, runLoadersEffect(runOptions));
+      activeLoaderHandle = handle as EffectRunHandle<void, never>;
+      return handle.promise.then(() => undefined);
+    }
+    return Effect.runPromise(runLoadersEffect(runOptions));
+  };
 
   history.subscribe(() => {
     syncSnapshot();
-    void Effect.runPromise(runLoadersEffect());
+    void runLoaders();
   });
 
-  void Effect.runPromise(runLoadersEffect());
+  void runLoaders();
 
   const navigatePath = (path: string, navigateOptions?: { readonly replace?: boolean }): void => {
     const href = buildHrefFromPath(path);
@@ -394,6 +404,10 @@ export const createRouter = <TRoutes extends readonly AnyRoute[]>(
     navigate,
     match,
     revalidate: (runOptions) => runLoaders(runOptions),
+    dispose: () => {
+      activeLoaderHandle?.cancel();
+      activeLoaderHandle = null;
+    },
   };
 };
 

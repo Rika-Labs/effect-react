@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+
+afterEach(() => {
+  cleanup();
+});
 import {
   createTableModel,
   createTableState,
@@ -195,6 +199,45 @@ describe("table + virtual", () => {
     await waitFor(() => {
       expect(screen.getByTestId("size").textContent).toBe("30");
     });
+  });
+
+  it("supports fixed itemHeight as shorthand for estimateSize", () => {
+    const Probe = () => {
+      const virtual = useVirtualList({
+        count: 5,
+        itemHeight: 20,
+        scrollOffset: 0,
+        viewportSize: 50,
+      });
+
+      return (
+        <div>
+          <div data-testid="total">{String(virtual.state.totalSize)}</div>
+          <div data-testid="item-size">{String(virtual.state.items[0]?.size ?? 0)}</div>
+        </div>
+      );
+    };
+
+    render(<Probe />);
+    expect(screen.getByTestId("total").textContent).toBe("100");
+    expect(screen.getByTestId("item-size").textContent).toBe("20");
+  });
+
+  it("prefers estimateSize over itemHeight when both provided", () => {
+    const Probe = () => {
+      const virtual = useVirtualList({
+        count: 5,
+        estimateSize: () => 15,
+        itemHeight: 20,
+        scrollOffset: 0,
+        viewportSize: 50,
+      });
+
+      return <div data-testid="item-size">{String(virtual.state.items[0]?.size ?? 0)}</div>;
+    };
+
+    render(<Probe />);
+    expect(screen.getByTestId("item-size").textContent).toBe("15");
   });
 
   it("supports dynamic row and column measurements through useVirtualGrid", async () => {

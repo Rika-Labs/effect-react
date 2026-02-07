@@ -30,16 +30,23 @@ export const useInfiniteQuery = <A, E, R, P = unknown>(
     keyHasher,
   } = options;
 
-  const entry = useMemo(
-    () =>
-      cache.ensureEntry<InfiniteData<A, P>, E>({
-        key,
-        ...(staleTime !== undefined ? { staleTime } : {}),
-        ...(gcTime !== undefined ? { gcTime } : {}),
-        ...(keyHasher !== undefined ? { keyHasher } : {}),
-      }),
-    [cache, gcTime, key, keyHasher, staleTime],
-  );
+  const effectiveKeyHasher = keyHasher ?? cache.keyHasher;
+  const keyHash = effectiveKeyHasher(key);
+
+  const stableKey = useRef(key);
+  if (effectiveKeyHasher(stableKey.current) !== keyHash) {
+    stableKey.current = key;
+  }
+
+  const entry = useMemo(() => {
+    void keyHash;
+    return cache.ensureEntry<InfiniteData<A, P>, E>({
+      key: stableKey.current,
+      ...(staleTime !== undefined ? { staleTime } : {}),
+      ...(gcTime !== undefined ? { gcTime } : {}),
+      ...(keyHasher !== undefined ? { keyHasher } : {}),
+    });
+  }, [cache, gcTime, keyHash, keyHasher, staleTime]);
 
   const getSnapshot = useCallback(() => cache.getSnapshot(entry), [cache, entry]);
   const subscribe = useCallback(
@@ -57,7 +64,7 @@ export const useInfiniteQuery = <A, E, R, P = unknown>(
         cache
           .fetchEffect({
             entry: entry as QueryEntry<InfiniteData<A, P>, E>,
-            key,
+            key: stableKey.current,
             query: Effect.map(
               query({ pageParam: initialPageParam }),
               (page): InfiniteData<A, P> => ({
@@ -72,7 +79,7 @@ export const useInfiniteQuery = <A, E, R, P = unknown>(
           })
           .pipe(Effect.asVoid),
       ),
-    [cache, entry, gcTime, initialPageParam, key, keyHasher, query, runtime, staleTime],
+    [cache, entry, gcTime, initialPageParam, keyHasher, query, runtime, staleTime],
   );
 
   useEffect(() => {
@@ -106,14 +113,15 @@ export const useInfiniteQuery = <A, E, R, P = unknown>(
     (): Promise<void> =>
       runEffectWithSquashedCause(
         Effect.gen(function* () {
-          if (!currentData || currentData.pages.length === 0) {
+          const freshData = cache.getSnapshot(entry).data as InfiniteData<A, P> | undefined;
+          if (!freshData || freshData.pages.length === 0) {
             return;
           }
-          const lastPage = currentData.pages[currentData.pages.length - 1] as A | undefined;
+          const lastPage = freshData.pages[freshData.pages.length - 1] as A | undefined;
           if (lastPage === undefined) {
             return;
           }
-          const nextParam = getNextPageParam(lastPage, currentData.pages);
+          const nextParam = getNextPageParam(lastPage, freshData.pages);
           if (nextParam === undefined || nextParam === null) {
             return;
           }
@@ -123,12 +131,12 @@ export const useInfiniteQuery = <A, E, R, P = unknown>(
           });
           yield* cache.fetchEffect({
             entry: entry as QueryEntry<InfiniteData<A, P>, E>,
-            key,
+            key: stableKey.current,
             query: Effect.map(
               query({ pageParam: nextParam }),
               (page): InfiniteData<A, P> => ({
-                pages: [...currentData.pages, page],
-                pageParams: [...currentData.pageParams, nextParam],
+                pages: [...freshData.pages, page],
+                pageParams: [...freshData.pageParams, nextParam],
               }),
             ),
             runtime,
@@ -146,35 +154,25 @@ export const useInfiniteQuery = <A, E, R, P = unknown>(
           Effect.asVoid,
         ),
       ),
-    [
-      cache,
-      currentData,
-      entry,
-      gcTime,
-      getNextPageParam,
-      key,
-      keyHasher,
-      query,
-      runtime,
-      staleTime,
-    ],
+    [cache, entry, gcTime, getNextPageParam, keyHasher, query, runtime, staleTime],
   );
 
   const fetchPreviousPage = useCallback(
     (): Promise<void> =>
       runEffectWithSquashedCause(
         Effect.gen(function* () {
-          if (!currentData || currentData.pages.length === 0) {
+          const freshData = cache.getSnapshot(entry).data as InfiniteData<A, P> | undefined;
+          if (!freshData || freshData.pages.length === 0) {
             return;
           }
           if (!getPreviousPageParam) {
             return;
           }
-          const firstPage = currentData.pages[0] as A | undefined;
+          const firstPage = freshData.pages[0] as A | undefined;
           if (firstPage === undefined) {
             return;
           }
-          const prevParam = getPreviousPageParam(firstPage, currentData.pages);
+          const prevParam = getPreviousPageParam(firstPage, freshData.pages);
           if (prevParam === undefined || prevParam === null) {
             return;
           }
@@ -184,12 +182,12 @@ export const useInfiniteQuery = <A, E, R, P = unknown>(
           });
           yield* cache.fetchEffect({
             entry: entry as QueryEntry<InfiniteData<A, P>, E>,
-            key,
+            key: stableKey.current,
             query: Effect.map(
               query({ pageParam: prevParam }),
               (page): InfiniteData<A, P> => ({
-                pages: [page, ...currentData.pages],
-                pageParams: [prevParam, ...currentData.pageParams],
+                pages: [page, ...freshData.pages],
+                pageParams: [prevParam, ...freshData.pageParams],
               }),
             ),
             runtime,
@@ -207,25 +205,14 @@ export const useInfiniteQuery = <A, E, R, P = unknown>(
           Effect.asVoid,
         ),
       ),
-    [
-      cache,
-      currentData,
-      entry,
-      gcTime,
-      getPreviousPageParam,
-      key,
-      keyHasher,
-      query,
-      runtime,
-      staleTime,
-    ],
+    [cache, entry, gcTime, getPreviousPageParam, keyHasher, query, runtime, staleTime],
   );
 
   const refetch = useCallback(() => runInitialFetch(), [runInitialFetch]);
 
   const invalidate = useCallback(() => {
-    cache.invalidate(key, keyHasher ?? cache.keyHasher);
-  }, [cache, key, keyHasher]);
+    cache.invalidate(stableKey.current, effectiveKeyHasher);
+  }, [cache, effectiveKeyHasher]);
 
   const isFetching = snapshot.status === "loading" || snapshot.status === "refreshing";
 

@@ -20,9 +20,7 @@ export function TaskFilters() {
     <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
       <select
         value={filters.status}
-        onChange={(e) =>
-          set({ ...filters, status: e.target.value as typeof filters.status })
-        }
+        onChange={(e) => set({ ...filters, status: e.target.value as typeof filters.status })}
         style={inputStyle}
       >
         <option value="all">All Statuses</option>

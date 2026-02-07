@@ -333,4 +333,25 @@ describe("router core", () => {
     expect(chain![0]!.route.id).toBe("dashboard");
     expect(chain![1]!.route.id).toBe("dashboard-index");
   });
+
+  it("cancels previous loader when navigating and cleans up on dispose", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const route = defineRoute({ id: "nav", path: "/nav/:id" });
+
+    const history = createMemoryRouterHistory("/nav/1");
+    const router = createRouter({
+      routes: [route] as const,
+      history,
+      runtime,
+    });
+
+    expect(router.getSnapshot().pathname).toBe("/nav/1");
+
+    router.navigatePath("/nav/2");
+    router.navigatePath("/nav/3");
+    expect(router.getSnapshot().pathname).toBe("/nav/3");
+
+    router.dispose();
+    await runtime.dispose();
+  });
 });

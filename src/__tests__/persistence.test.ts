@@ -89,6 +89,66 @@ describe("persistence primitives", () => {
     expect(entries).toEqual([["state", "8"]]);
   });
 
+  it("wraps storage errors as PersistenceError on save", async () => {
+    const storage: Parameters<typeof createPersistenceStore>[0]["storage"] = {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("quota exceeded");
+      },
+      removeItem: () => undefined,
+    };
+    const store = createPersistenceStore<string>({
+      key: "fail-save",
+      storage,
+    });
+
+    await expect(store.save("value")).rejects.toMatchObject({
+      _tag: "PersistenceError",
+      operation: "save",
+      key: "fail-save",
+    });
+  });
+
+  it("wraps storage errors as PersistenceError on load", async () => {
+    const storage: Parameters<typeof createPersistenceStore>[0]["storage"] = {
+      getItem: () => {
+        throw new Error("access denied");
+      },
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    };
+    const store = createPersistenceStore<string>({
+      key: "fail-load",
+      storage,
+    });
+
+    await expect(store.load()).rejects.toMatchObject({
+      _tag: "PersistenceError",
+      operation: "load",
+      key: "fail-load",
+    });
+  });
+
+  it("wraps storage errors as PersistenceError on clear", async () => {
+    const storage: Parameters<typeof createPersistenceStore>[0]["storage"] = {
+      getItem: () => null,
+      setItem: () => undefined,
+      removeItem: () => {
+        throw new Error("permission denied");
+      },
+    };
+    const store = createPersistenceStore<string>({
+      key: "fail-clear",
+      storage,
+    });
+
+    await expect(store.clear()).rejects.toMatchObject({
+      _tag: "PersistenceError",
+      operation: "clear",
+      key: "fail-clear",
+    });
+  });
+
   it("hydrates query state with explicit dehydrated payload", async () => {
     const storage = createMemoryStorage();
     const store = createPersistenceStore<DehydratedState>({

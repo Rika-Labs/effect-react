@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run server.ts & bunx vite",
+    "dev:server": "bun run server.ts",
+    "dev:client": "bunx vite",
+    "dev": "bun run dev:server & bun run dev:client",
     "server": "bun run server.ts"
   },
   "dependencies": {

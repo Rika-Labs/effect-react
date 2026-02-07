@@ -5,6 +5,11 @@ import { DEHYDRATED_STATE_VERSION } from "../query/types";
 
 const customKeyHasher = (key: readonly unknown[]) => `custom:${String(key[0])}`;
 
+const buildDeep = (depth: number): Record<string, unknown> => {
+  if (depth === 0) return { value: 1 };
+  return { nested: buildDeep(depth - 1) };
+};
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -529,6 +534,111 @@ describe("QueryCache", () => {
     unsubscribe();
   });
 
+  it("invalidates entries by prefix matching", () => {
+    const cache = new QueryCache({ defaultStaleTime: 10_000 });
+    cache.setQueryData(["users", "list"], 1);
+    cache.setQueryData(["users", "detail", 1], 2);
+    cache.setQueryData(["posts", "list"], 3);
+    const usersListEntry = cache.ensureEntry<number, never>({ key: ["users", "list"] });
+    const usersDetailEntry = cache.ensureEntry<number, never>({ key: ["users", "detail", 1] });
+    const postsEntry = cache.ensureEntry<number, never>({ key: ["posts", "list"] });
+
+    cache.invalidate(["users"]);
+
+    expect(cache.getSnapshot(usersListEntry).isStale).toBe(true);
+    expect(cache.getSnapshot(usersDetailEntry).isStale).toBe(true);
+    expect(cache.getSnapshot(postsEntry).isStale).toBe(false);
+  });
+
+  it("prefix invalidation does not match shorter keys", () => {
+    const cache = new QueryCache({ defaultStaleTime: 10_000 });
+    cache.setQueryData(["a"], 1);
+    const entry = cache.ensureEntry<number, never>({ key: ["a"] });
+
+    cache.invalidate(["a", "b", "c"]);
+
+    expect(cache.getSnapshot(entry).isStale).toBe(false);
+  });
+
+  it("structuralEqual handles Date objects", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const cache = new QueryCache();
+    const date = new Date("2024-01-01");
+    cache.setQueryData(["dates"], { created: date });
+
+    const sameDateQuery = Effect.succeed({ created: new Date("2024-01-01") });
+    const entry = cache.ensureEntry<{ created: Date }, never>({ key: ["dates"] });
+    const unsubscribe = cache.subscribeEntry(entry, () => {});
+    await cache.fetch({
+      entry,
+      key: ["dates"],
+      runtime,
+      query: sameDateQuery,
+    });
+
+    const snapshot = cache.getSnapshot(entry);
+    expect(snapshot.data?.created).toEqual(date);
+
+    const diffDateQuery = Effect.succeed({ created: new Date("2025-01-01") });
+    await cache.fetch({
+      entry,
+      key: ["dates"],
+      runtime,
+      query: diffDateQuery,
+      force: true,
+    });
+    const updated = cache.getSnapshot(entry);
+    expect(updated.data?.created.getTime()).toBe(new Date("2025-01-01").getTime());
+
+    unsubscribe();
+    await runtime.dispose();
+  });
+
+  it("structuralEqual returns false for Map, Set, RegExp", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const cache = new QueryCache();
+    cache.setQueryData(["map"], new Map([["a", 1]]));
+    const entry = cache.ensureEntry<unknown, never>({ key: ["map"] });
+    const unsubscribe = cache.subscribeEntry(entry, () => {});
+
+    await cache.fetch({
+      entry,
+      key: ["map"],
+      runtime,
+      query: Effect.succeed(new Map([["a", 1]])),
+      force: true,
+    });
+
+    const snapshot = cache.getSnapshot(entry);
+    expect(snapshot.data).toBeInstanceOf(Map);
+
+    unsubscribe();
+    await runtime.dispose();
+  });
+
+  it("structuralEqual handles deeply nested objects within depth limit", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const cache = new QueryCache();
+
+    cache.setQueryData(["deep"], buildDeep(25));
+    const entry = cache.ensureEntry<unknown, never>({ key: ["deep"] });
+    const unsubscribe = cache.subscribeEntry(entry, () => {});
+
+    await cache.fetch({
+      entry,
+      key: ["deep"],
+      runtime,
+      query: Effect.succeed(buildDeep(25)),
+      force: true,
+    });
+
+    const snapshot = cache.getSnapshot(entry);
+    expect(snapshot.status).toBe("success");
+
+    unsubscribe();
+    await runtime.dispose();
+  });
+
   it("ensureEntry with initialData schedules stale timer", () => {
     vi.useFakeTimers();
     const cache = new QueryCache({ defaultStaleTime: 50 });
@@ -543,6 +653,13 @@ describe("QueryCache", () => {
 
     vi.advanceTimersByTime(51);
     expect(cache.getSnapshot(entry).isStale).toBe(true);
+  });
+
+  it("ensureEntry returns stable entry for equivalent keys", () => {
+    const cache = new QueryCache();
+    const first = cache.ensureEntry<string, never>({ key: ["users", 1] });
+    const second = cache.ensureEntry<string, never>({ key: ["users", 1] });
+    expect(first).toBe(second);
   });
 
   it("removes and clears entries", () => {

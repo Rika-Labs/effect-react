@@ -40,7 +40,12 @@ const useMeasuredStore = (): MeasuredStore => {
   };
 };
 
-export interface UseVirtualListOptions extends Omit<CreateVirtualListOptions, "measuredSizes"> {
+export interface UseVirtualListOptions extends Omit<
+  CreateVirtualListOptions,
+  "measuredSizes" | "estimateSize"
+> {
+  readonly estimateSize?: (index: number) => number;
+  readonly itemHeight?: number;
   readonly measuredSizes?: Readonly<Record<number, number>>;
 }
 
@@ -52,14 +57,19 @@ export interface UseVirtualListResult {
 export const useVirtualList = (options: UseVirtualListOptions): UseVirtualListResult => {
   const measuredStore = useMeasuredStore();
   const measuredSizes = options.measuredSizes ?? measuredStore.get();
+  const resolvedEstimateSize = useMemo(
+    () => options.estimateSize ?? (() => options.itemHeight ?? 0),
+    [options.estimateSize, options.itemHeight],
+  );
 
   const state = useMemo(
     () =>
       createVirtualList({
         ...options,
+        estimateSize: resolvedEstimateSize,
         measuredSizes,
       }),
-    [measuredSizes, options],
+    [measuredSizes, options, resolvedEstimateSize],
   );
 
   return {

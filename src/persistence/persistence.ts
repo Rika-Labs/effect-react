@@ -26,6 +26,24 @@ export interface CreatePersistenceStoreOptions<A> {
   readonly codec?: PersistenceCodec<A>;
 }
 
+export interface PersistenceError {
+  readonly _tag: "PersistenceError";
+  readonly operation: "save" | "load" | "clear";
+  readonly key: string;
+  readonly cause: unknown;
+}
+
+const persistenceError = (
+  operation: PersistenceError["operation"],
+  key: string,
+  cause: unknown,
+): PersistenceError => ({
+  _tag: "PersistenceError",
+  operation,
+  key,
+  cause,
+});
+
 const jsonCodec = <A>(): PersistenceCodec<A> => ({
   encode: (value) => JSON.stringify(value),
   decode: (encoded) => JSON.parse(encoded) as A,
@@ -75,12 +93,18 @@ export const createPersistenceStore = <A>(
 
   const saveEffect = (value: A): Effect.Effect<void, unknown, never> =>
     Effect.gen(function* () {
-      const encoded = codec.encode(value);
-      yield* fromMaybePromiseEffect(() => options.storage.setItem(options.key, encoded));
+      const encoded = yield* Effect.try({
+        try: () => codec.encode(value),
+        catch: (cause) => persistenceError("save", options.key, cause),
+      });
+      yield* fromMaybePromiseEffect(() => options.storage.setItem(options.key, encoded)).pipe(
+        Effect.mapError((cause) => persistenceError("save", options.key, cause)),
+      );
     });
 
   const loadEffect = (): Effect.Effect<A | undefined, unknown, never> =>
     fromMaybePromiseEffect(() => options.storage.getItem(options.key)).pipe(
+      Effect.mapError((cause) => persistenceError("load", options.key, cause)),
       Effect.map((encoded) => {
         if (encoded === null) {
           return undefined;
@@ -94,7 +118,9 @@ export const createPersistenceStore = <A>(
     );
 
   const clearEffect = (): Effect.Effect<void, unknown, never> =>
-    fromMaybePromiseEffect(() => options.storage.removeItem(options.key));
+    fromMaybePromiseEffect(() => options.storage.removeItem(options.key)).pipe(
+      Effect.mapError((cause) => persistenceError("clear", options.key, cause)),
+    );
 
   return {
     key: options.key,

@@ -85,11 +85,16 @@ export interface QueryCacheDiagnosticsSnapshot {
   readonly entries: readonly QueryCacheEntryDiagnostics[];
 }
 
-const structuralEqual = (a: unknown, b: unknown): boolean => {
+const structuralEqual = (a: unknown, b: unknown, depth = 0): boolean => {
+  if (depth > 20) return false;
   if (a === b) return true;
   if (a === null || b === null) return a === b;
   if (typeof a !== typeof b) return false;
   if (typeof a !== "object") return false;
+
+  if (a instanceof Date) return b instanceof Date && a.getTime() === b.getTime();
+  if (a instanceof Map || a instanceof Set || a instanceof RegExp) return false;
+  if (b instanceof Map || b instanceof Set || b instanceof RegExp) return false;
 
   const aObj = a as Record<string, unknown>;
   const bObj = b as Record<string, unknown>;
@@ -98,7 +103,7 @@ const structuralEqual = (a: unknown, b: unknown): boolean => {
     if (!Array.isArray(bObj)) return false;
     if (aObj.length !== bObj.length) return false;
     for (let i = 0; i < aObj.length; i++) {
-      if (!structuralEqual(aObj[i], bObj[i])) return false;
+      if (!structuralEqual(aObj[i], bObj[i], depth + 1)) return false;
     }
     return true;
   }
@@ -110,7 +115,7 @@ const structuralEqual = (a: unknown, b: unknown): boolean => {
   if (aKeys.length !== bKeys.length) return false;
   for (const key of aKeys) {
     if (!Object.prototype.hasOwnProperty.call(bObj, key)) return false;
-    if (!structuralEqual(aObj[key], bObj[key])) return false;
+    if (!structuralEqual(aObj[key], bObj[key], depth + 1)) return false;
   }
   return true;
 };
@@ -384,7 +389,10 @@ export class QueryCache {
         if (typeof target === "function") {
           return target(entry.key);
         }
-        return entry.hash === keyHasher(target);
+        if (entry.hash === keyHasher(target)) {
+          return true;
+        }
+        return this.isPrefixMatch(target, entry.key);
       })();
       if (!matches) {
         continue;
@@ -552,6 +560,14 @@ export class QueryCache {
 
     entry.store.setSnapshot(successResult(data, now, stale));
     this.scheduleStale(entry);
+  }
+
+  private isPrefixMatch(prefix: QueryKey, key: QueryKey): boolean {
+    if (prefix.length > key.length) return false;
+    for (let i = 0; i < prefix.length; i++) {
+      if (prefix[i] !== key[i]) return false;
+    }
+    return true;
   }
 
   private matchesFilter(entry: QueryEntry<unknown, unknown>, filters?: QueryFilters): boolean {

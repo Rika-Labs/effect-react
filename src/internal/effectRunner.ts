@@ -1,4 +1,4 @@
-import { Effect, type Exit } from "effect";
+import type { Effect, Exit } from "effect";
 import type { EffectRuntime } from "./runtimeContext";
 
 export interface EffectRunHandle<A, E> {
@@ -13,8 +13,8 @@ export const runEffect = <A, E, R>(
 ): EffectRunHandle<A, E> => {
   const controller = new AbortController();
   let canceled = false;
-  const scoped = Effect.scoped(effect) as unknown as Effect.Effect<A, E, never>;
-  const promise = runtime.runPromiseExit(scoped, {
+  const program = effect as unknown as Effect.Effect<A, E, never>;
+  const promise = runtime.runPromiseExit(program, {
     signal: controller.signal,
   } as { readonly signal: AbortSignal }) as Promise<Exit.Exit<A, E>>;
   return {

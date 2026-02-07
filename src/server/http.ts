@@ -39,11 +39,23 @@ export type ServerActionHttpHandlerEffect = (
   request: Request,
 ) => Effect.Effect<Response, never, never>;
 
-const createJsonResponse = (status: number, body: unknown): Response =>
+const defaultSecurityHeaders: Readonly<Record<string, string>> = {
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY",
+  "referrer-policy": "strict-origin-when-cross-origin",
+};
+
+const createJsonResponse = (
+  status: number,
+  body: unknown,
+  extraHeaders?: Readonly<Record<string, string>>,
+): Response =>
   new Response(JSON.stringify(body), {
     status,
     headers: {
+      ...defaultSecurityHeaders,
       "content-type": "application/json",
+      ...extraHeaders,
     },
   });
 

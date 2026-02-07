@@ -72,55 +72,69 @@ Bun.serve({
 
     // POST /api/tasks
     if (req.method === "POST" && path === "/api/tasks") {
-      const body = (await req.json()) as {
-        title?: string;
-        description?: string;
-        priority?: string;
-      };
-      if (!body.title || body.title.trim().length === 0) {
-        return json({ error: "Title is required" }, 400);
-      }
+      try {
+        const body = (await req.json()) as {
+          title?: string;
+          description?: string;
+          priority?: string;
+        };
+        if (!body.title || body.title.trim().length === 0) {
+          return json({ error: "Title is required" }, 400);
+        }
 
-      const stmt = db.prepare(
-        "INSERT INTO tasks (title, description, priority) VALUES (?, ?, ?) RETURNING *",
-      );
-      const task = stmt.get(
-        body.title.trim(),
-        body.description?.trim() ?? "",
-        body.priority ?? "medium",
-      );
-      return json(task, 201);
+        const stmt = db.prepare(
+          "INSERT INTO tasks (title, description, priority) VALUES (?, ?, ?) RETURNING *",
+        );
+        const task = stmt.get(
+          body.title.trim(),
+          body.description?.trim() ?? "",
+          body.priority ?? "medium",
+        );
+        return json(task, 201);
+      } catch (e) {
+        if (e instanceof SyntaxError) {
+          return json({ error: "Invalid JSON body" }, 400);
+        }
+        return json({ error: "Failed to create task" }, 500);
+      }
     }
 
     // PUT /api/tasks/:id
     const putMatch = path.match(/^\/api\/tasks\/(\d+)$/);
     if (req.method === "PUT" && putMatch) {
-      const id = putMatch[1];
-      const body = (await req.json()) as Record<string, unknown>;
+      try {
+        const id = putMatch[1];
+        const body = (await req.json()) as Record<string, unknown>;
 
-      const fields: string[] = [];
-      const params: unknown[] = [];
+        const fields: string[] = [];
+        const params: unknown[] = [];
 
-      for (const key of ["title", "description", "status", "priority"] as const) {
-        if (key in body) {
-          fields.push(`${key} = ?`);
-          params.push(body[key]);
+        for (const key of ["title", "description", "status", "priority"] as const) {
+          if (key in body) {
+            fields.push(`${key} = ?`);
+            params.push(body[key]);
+          }
         }
+
+        if (fields.length === 0) {
+          return json({ error: "No fields to update" }, 400);
+        }
+
+        fields.push("updated_at = datetime('now')");
+        params.push(id);
+
+        const task = db
+          .prepare(`UPDATE tasks SET ${fields.join(", ")} WHERE id = ? RETURNING *`)
+          .get(...(params as [unknown, ...unknown[]]));
+
+        if (!task) return json({ error: "Task not found" }, 404);
+        return json(task);
+      } catch (e) {
+        if (e instanceof SyntaxError) {
+          return json({ error: "Invalid JSON body" }, 400);
+        }
+        return json({ error: "Failed to update task" }, 500);
       }
-
-      if (fields.length === 0) {
-        return json({ error: "No fields to update" }, 400);
-      }
-
-      fields.push("updated_at = datetime('now')");
-      params.push(id);
-
-      const task = db
-        .prepare(`UPDATE tasks SET ${fields.join(", ")} WHERE id = ? RETURNING *`)
-        .get(...params);
-
-      if (!task) return json({ error: "Task not found" }, 404);
-      return json(task);
     }
 
     // DELETE /api/tasks/:id

@@ -302,4 +302,179 @@ describe("form primitives", () => {
 
     await runtime.dispose();
   });
+
+  it("exposes submitError when onSubmit throws", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    let form: UseFormResult<{ readonly value: number }> | undefined;
+
+    const Probe = () => {
+      form = useForm({
+        initialValues: { value: 1 },
+        onSubmit: async () => {
+          throw new Error("submit-boom");
+        },
+      });
+      return (
+        <div data-testid="error">
+          {form.submitError instanceof Error ? form.submitError.message : "-"}
+        </div>
+      );
+    };
+
+    render(
+      <EffectProvider runtime={runtime}>
+        <Probe />
+      </EffectProvider>,
+    );
+
+    expect(screen.getByTestId("error").textContent).toBe("-");
+    await expect(form!.submit()).resolves.toBe(false);
+    await waitFor(() => {
+      expect(screen.getByTestId("error").textContent).toBe("submit-boom");
+    });
+
+    form!.clearSubmitError();
+    await waitFor(() => {
+      expect(screen.getByTestId("error").textContent).toBe("-");
+    });
+
+    await runtime.dispose();
+  });
+
+  it("clears submitError on reset", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    let form: UseFormResult<{ readonly value: number }> | undefined;
+
+    const Probe = () => {
+      form = useForm({
+        initialValues: { value: 1 },
+        onSubmit: async () => {
+          throw new Error("fail");
+        },
+      });
+      return (
+        <div data-testid="error">
+          {form.submitError instanceof Error ? form.submitError.message : "-"}
+        </div>
+      );
+    };
+
+    render(
+      <EffectProvider runtime={runtime}>
+        <Probe />
+      </EffectProvider>,
+    );
+
+    await form!.submit();
+    await waitFor(() => {
+      expect(screen.getByTestId("error").textContent).toBe("fail");
+    });
+
+    form!.reset();
+    await waitFor(() => {
+      expect(screen.getByTestId("error").textContent).toBe("-");
+    });
+
+    await runtime.dispose();
+  });
+
+  it("reinitializes form when enableReinitialize is true and initialValues change", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    let form: UseFormResult<{ readonly name: string }> | undefined;
+
+    const Probe = ({ initialValues }: { readonly initialValues: { readonly name: string } }) => {
+      form = useForm({
+        initialValues,
+        enableReinitialize: true,
+      });
+      return (
+        <div>
+          <div data-testid="value">{form.values.name}</div>
+          <div data-testid="dirty">{String(form.dirty)}</div>
+        </div>
+      );
+    };
+
+    const view = render(
+      <EffectProvider runtime={runtime}>
+        <Probe initialValues={{ name: "alice" }} />
+      </EffectProvider>,
+    );
+
+    expect(screen.getByTestId("value").textContent).toBe("alice");
+
+    form!.setFieldValue("name", "modified");
+    await waitFor(() => {
+      expect(screen.getByTestId("dirty").textContent).toBe("true");
+    });
+
+    view.rerender(
+      <EffectProvider runtime={runtime}>
+        <Probe initialValues={{ name: "bob" }} />
+      </EffectProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("value").textContent).toBe("bob");
+      expect(screen.getByTestId("dirty").textContent).toBe("false");
+    });
+
+    await runtime.dispose();
+  });
+
+  it("does not reinitialize when enableReinitialize is false", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    let form: UseFormResult<{ readonly name: string }> | undefined;
+
+    const Probe = ({ initialValues }: { readonly initialValues: { readonly name: string } }) => {
+      form = useForm({
+        initialValues,
+        enableReinitialize: false,
+      });
+      return <div data-testid="value">{form.values.name}</div>;
+    };
+
+    const view = render(
+      <EffectProvider runtime={runtime}>
+        <Probe initialValues={{ name: "alice" }} />
+      </EffectProvider>,
+    );
+
+    expect(screen.getByTestId("value").textContent).toBe("alice");
+
+    view.rerender(
+      <EffectProvider runtime={runtime}>
+        <Probe initialValues={{ name: "bob" }} />
+      </EffectProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("value").textContent).toBe("alice");
+    });
+
+    await runtime.dispose();
+  });
+
+  it("accepts narrowed onSubmit types", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const submitted: string[] = [];
+
+    const Probe = () => {
+      useForm({
+        initialValues: { name: "" },
+        onSubmit: (values): void => {
+          submitted.push(values.name);
+        },
+      });
+      return null;
+    };
+
+    render(
+      <EffectProvider runtime={runtime}>
+        <Probe />
+      </EffectProvider>,
+    );
+
+    await runtime.dispose();
+  });
 });

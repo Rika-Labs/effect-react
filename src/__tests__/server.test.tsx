@@ -375,6 +375,34 @@ describe("server", () => {
     expect(ctx.method).toBe("POST");
   });
 
+  it("includes default security headers in responses", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+
+    const action = defineServerAction({
+      name: "sec",
+      run: (_input: Record<string, never>) => Effect.succeed("ok"),
+    });
+
+    const handler = createRequestScopedServerActionHttpHandler({
+      runtime,
+      actions: [action],
+    });
+
+    const response = await handler(
+      new Request("https://example.test/__effect/actions/sec", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ input: {} }),
+      }),
+    );
+
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("x-frame-options")).toBe("DENY");
+    expect(response.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+
+    await runtime.dispose();
+  });
+
   it("injects RequestContext into route handlers", async () => {
     const runtime = ManagedRuntime.make(Layer.empty);
 

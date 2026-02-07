@@ -62,6 +62,8 @@ export const useMutation = <V, A, E, R>(
   const handleRef = useRef<EffectRunHandle<A, E> | null>(null);
   const runIdRef = useRef(0);
   const mountedRef = useRef(true);
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
 
   const getSnapshot = useCallback(() => storeRef.current.getSnapshot(), []);
   const subscribe = useCallback((listener: () => void) => storeRef.current.subscribe(listener), []);
@@ -110,7 +112,7 @@ export const useMutation = <V, A, E, R>(
             handleRef.current = null;
           }
 
-          options.optimistic?.apply(variables);
+          optionsRef.current.optimistic?.apply(variables);
 
           setSnapshot({
             status: "pending",
@@ -119,7 +121,10 @@ export const useMutation = <V, A, E, R>(
             submittedAt: Date.now(),
           });
 
-          const handle = runEffect(runtime, resolveMutation(options.mutation, variables));
+          const handle = runEffect(
+            runtime,
+            resolveMutation(optionsRef.current.mutation, variables),
+          );
           handleRef.current = handle;
 
           const exit = yield* Effect.tryPromise({
@@ -139,20 +144,22 @@ export const useMutation = <V, A, E, R>(
               submittedAt: Date.now(),
             };
             setSnapshot(result);
-            for (const target of resolveTargets(options.invalidate)) {
+            for (const target of resolveTargets(optionsRef.current.invalidate)) {
               cache.invalidate(target);
             }
-            if (options.onSuccess) {
-              yield* fromMaybePromiseEffect(() => options.onSuccess!(exit.value, variables));
+            if (optionsRef.current.onSuccess) {
+              yield* fromMaybePromiseEffect(() =>
+                optionsRef.current.onSuccess!(exit.value, variables),
+              );
             }
-            if (options.onSettled) {
-              yield* fromMaybePromiseEffect(() => options.onSettled!(result, variables));
+            if (optionsRef.current.onSettled) {
+              yield* fromMaybePromiseEffect(() => optionsRef.current.onSettled!(result, variables));
             }
             return exit;
           }
 
           const cause = exit.cause as Cause.Cause<E>;
-          options.optimistic?.rollback(variables, cause);
+          optionsRef.current.optimistic?.rollback(variables, cause);
           const result: MutationResult<A, E> = {
             status: "failure",
             data: undefined,
@@ -160,16 +167,16 @@ export const useMutation = <V, A, E, R>(
             submittedAt: Date.now(),
           };
           setSnapshot(result);
-          if (options.onError) {
-            yield* fromMaybePromiseEffect(() => options.onError!(cause, variables));
+          if (optionsRef.current.onError) {
+            yield* fromMaybePromiseEffect(() => optionsRef.current.onError!(cause, variables));
           }
-          if (options.onSettled) {
-            yield* fromMaybePromiseEffect(() => options.onSettled!(result, variables));
+          if (optionsRef.current.onSettled) {
+            yield* fromMaybePromiseEffect(() => optionsRef.current.onSettled!(result, variables));
           }
           return exit;
         }),
       ),
-    [cache, options, runtime, setSnapshot],
+    [cache, runtime, setSnapshot],
   );
 
   return {

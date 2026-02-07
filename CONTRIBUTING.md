@@ -19,18 +19,18 @@ bun run check
 
 ## Development Scripts
 
-| Script                 | Description                                          |
-| ---------------------- | ---------------------------------------------------- |
+| Script                 | Description                                                        |
+| ---------------------- | ------------------------------------------------------------------ |
 | `bun run check`        | Run all checks (format, lint, typecheck, effect:check, test, size) |
-| `bun run test`         | Run tests with coverage                              |
-| `bun run test:watch`   | Run tests in watch mode                              |
-| `bun run lint`         | Lint with oxlint (type-aware, deny warnings)         |
-| `bun run lint:fix`     | Lint and auto-fix                                    |
-| `bun run format`       | Format with oxfmt                                    |
-| `bun run format:check` | Check formatting                                     |
-| `bun run typecheck`    | Type-check with tsgo                                 |
-| `bun run size:check`   | Build and verify bundle size                         |
-| `bun run build`        | Build with tsup (ESM + CJS) + tsc (.d.ts)            |
+| `bun run test`         | Run tests with coverage                                            |
+| `bun run test:watch`   | Run tests in watch mode                                            |
+| `bun run lint`         | Lint with oxlint (type-aware, deny warnings)                       |
+| `bun run lint:fix`     | Lint and auto-fix                                                  |
+| `bun run format`       | Format with oxfmt                                                  |
+| `bun run format:check` | Check formatting                                                   |
+| `bun run typecheck`    | Type-check with tsgo                                               |
+| `bun run size:check`   | Build and verify bundle size                                       |
+| `bun run build`        | Build with tsup (ESM + CJS) + tsc (.d.ts)                          |
 
 ## Toolchain
 

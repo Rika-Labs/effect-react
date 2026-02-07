@@ -42,7 +42,8 @@ export const useSubscriptionRef = <A, S = A>(
 
   const getSnapshot = useCallback(() => storeRef.current.getSnapshot(), []);
   const subscribe = useCallback((listener: () => void) => storeRef.current.subscribe(listener), []);
-  const value = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const getServerSnapshot = useCallback(() => asSelected(initial, select) as S, [initial, select]);
+  const value = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const pushSelected = useCallback(
     (next: A) => {
@@ -91,7 +92,12 @@ export const useSubscriptionRef = <A, S = A>(
     (next: A) =>
       runEffectWithSquashedCause(
         Effect.gen(function* () {
-          const prev = storeRef.current.getSnapshot() as unknown as A;
+          const prevHandle = runEffect(runtime, SubscriptionRef.get(ref));
+          const prevExit = yield* Effect.tryPromise({
+            try: () => prevHandle.promise,
+            catch: (cause) => cause,
+          });
+          const prev = Exit.isSuccess(prevExit) ? prevExit.value : next;
           const handle = runEffect(runtime, SubscriptionRef.set(ref, next));
           const exit = yield* Effect.tryPromise({
             try: () => handle.promise,
@@ -113,7 +119,14 @@ export const useSubscriptionRef = <A, S = A>(
     (updater: (value: A) => A) =>
       runEffectWithSquashedCause(
         Effect.gen(function* () {
-          const prev = storeRef.current.getSnapshot() as unknown as A;
+          const prevHandle = runEffect(runtime, SubscriptionRef.get(ref));
+          const prevExit = yield* Effect.tryPromise({
+            try: () => prevHandle.promise,
+            catch: (cause) => cause,
+          });
+          const prev = yield* Exit.isSuccess(prevExit)
+            ? Effect.succeed(prevExit.value)
+            : Effect.fail(new Error("SubscriptionRef get failed"));
           const handle = runEffect(runtime, SubscriptionRef.update(ref, updater));
           const exit = yield* Effect.tryPromise({
             try: () => handle.promise,
@@ -122,17 +135,10 @@ export const useSubscriptionRef = <A, S = A>(
           if (Exit.isFailure(exit)) {
             yield* Effect.fail(new Error("SubscriptionRef update failed"));
           }
-          const readHandle = runEffect(runtime, SubscriptionRef.get(ref));
-          const readExit = yield* Effect.tryPromise({
-            try: () => readHandle.promise,
-            catch: (cause) => cause,
-          });
-          const currentValue = yield* Exit.isSuccess(readExit)
-            ? Effect.succeed(readExit.value)
-            : Effect.fail(new Error("SubscriptionRef get failed"));
+          const next = updater(prev);
           yield* Effect.sync(() => {
-            pushSelected(currentValue);
-            runMiddlewares(currentValue, prev);
+            pushSelected(next);
+            runMiddlewares(next, prev);
           });
         }),
       ),

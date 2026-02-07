@@ -32,24 +32,42 @@ export const useQuery = <A, E, R, S = A>(
     keyHasher,
   } = options;
 
-  const entry = useMemo(
-    () =>
-      cache.ensureEntry<A, E>({
-        key,
-        ...(staleTime !== undefined ? { staleTime } : {}),
-        ...(gcTime !== undefined ? { gcTime } : {}),
-        ...(initialData !== undefined ? { initialData } : {}),
-        ...(keyHasher !== undefined ? { keyHasher } : {}),
-      }),
-    [cache, gcTime, initialData, key, keyHasher, staleTime],
-  );
+  const effectiveKeyHasher = keyHasher ?? cache.keyHasher;
+  const keyHash = effectiveKeyHasher(key);
+
+  const stableKey = useRef(key);
+  if (effectiveKeyHasher(stableKey.current) !== keyHash) {
+    stableKey.current = key;
+  }
+
+  const entry = useMemo(() => {
+    void keyHash;
+    return cache.ensureEntry<A, E>({
+      key: stableKey.current,
+      ...(staleTime !== undefined ? { staleTime } : {}),
+      ...(gcTime !== undefined ? { gcTime } : {}),
+      ...(initialData !== undefined ? { initialData } : {}),
+      ...(keyHasher !== undefined ? { keyHasher } : {}),
+    });
+  }, [cache, gcTime, initialData, keyHash, keyHasher, staleTime]);
 
   const getSnapshot = useCallback(() => cache.getSnapshot(entry), [cache, entry]);
   const subscribe = useCallback(
     (listener: () => void) => cache.subscribeEntry(entry, listener),
     [cache, entry],
   );
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const getServerSnapshot = useCallback(
+    () => ({
+      status: "initial" as const,
+      data: initialData as A | undefined,
+      cause: undefined,
+      updatedAt: null,
+      isStale: true,
+      isFetching: false,
+    }),
+    [initialData],
+  );
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const initialFetchHashRef = useRef<string | null>(null);
 
   const runFetch = useCallback(
@@ -58,7 +76,7 @@ export const useQuery = <A, E, R, S = A>(
         cache
           .fetchEffect({
             entry,
-            key,
+            key: stableKey.current,
             query: resolveQueryEffect(query),
             runtime,
             force,
@@ -71,7 +89,7 @@ export const useQuery = <A, E, R, S = A>(
           })
           .pipe(Effect.asVoid),
       ),
-    [cache, entry, gcTime, key, keyHasher, options.structuralSharing, query, runtime, staleTime],
+    [cache, entry, gcTime, keyHasher, options.structuralSharing, query, runtime, staleTime],
   );
 
   useEffect(() => {
@@ -151,8 +169,8 @@ export const useQuery = <A, E, R, S = A>(
   const refetch = useCallback(() => runFetch(true), [runFetch]);
 
   const invalidate = useCallback(() => {
-    cache.invalidate(key, keyHasher ?? cache.keyHasher);
-  }, [cache, key, keyHasher]);
+    cache.invalidate(stableKey.current, effectiveKeyHasher);
+  }, [cache, effectiveKeyHasher]);
 
   return {
     ...mappedSnapshot,

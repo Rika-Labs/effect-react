@@ -9,6 +9,7 @@ export type FormTouched<_T extends Record<string, unknown>> = Record<string, boo
 
 export interface UseFormOptions<T extends Record<string, unknown>> {
   readonly initialValues: T;
+  readonly enableReinitialize?: boolean;
   readonly validate?: (values: T) => FormErrors<T> | Promise<FormErrors<T>>;
   readonly validateField?: <K extends keyof T>(
     field: K,
@@ -16,8 +17,8 @@ export interface UseFormOptions<T extends Record<string, unknown>> {
     values: T,
   ) => string | undefined | Promise<string | undefined>;
   readonly onSubmit?:
-    | ((values: T) => Effect.Effect<unknown, unknown, unknown>)
-    | ((values: T) => Promise<unknown>);
+    | ((values: T) => Effect.Effect<void, unknown, never>)
+    | ((values: T) => void | Promise<void>);
   readonly schema?: Schema.Schema<T, any, never>;
 }
 
@@ -42,6 +43,8 @@ export interface UseFormResult<T extends Record<string, unknown>> {
   readonly validateField: <K extends keyof T>(field: K) => Promise<boolean>;
   readonly validateForm: () => Promise<boolean>;
   readonly submit: () => Promise<boolean>;
+  readonly submitError: unknown;
+  readonly clearSubmitError: () => void;
   readonly cancelSubmit: () => void;
   readonly reset: () => void;
   readonly watch: (...fields: (keyof T)[]) => Partial<T>;
@@ -159,19 +162,34 @@ export const useForm = <T extends Record<string, unknown>>(
   options: UseFormOptions<T>,
 ): UseFormResult<T> => {
   const runtime = useRuntime();
-  const { initialValues, onSubmit, validate, validateField, schema } = options;
+  const { initialValues, onSubmit, validate, validateField, schema, enableReinitialize } = options;
   const [values, setValues] = useState<T>(initialValues);
   const [errors, setErrors] = useState<FormErrors<T>>({});
   const [touched, setTouched] = useState<FormTouched<T>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<unknown>(null);
+  const clearSubmitError = useCallback(() => setSubmitError(null), []);
   const valuesRef = useRef(values);
   const submitRunIdRef = useRef(0);
   const submitHandleRef = useRef<EffectRunHandle<unknown, unknown> | null>(null);
   const fieldValidationRunRef = useRef(new Map<keyof T, number>());
 
+  const prevInitialRef = useRef(initialValues);
+
   useEffect(() => {
     valuesRef.current = values;
   }, [values]);
+
+  useEffect(() => {
+    if (enableReinitialize === true && !shallowEqualValues(prevInitialRef.current, initialValues)) {
+      prevInitialRef.current = initialValues;
+      valuesRef.current = initialValues;
+      setValues(initialValues);
+      setErrors({});
+      setTouched({});
+      fieldValidationRunRef.current.clear();
+    }
+  }, [enableReinitialize, initialValues]);
 
   const cancelSubmit = useCallback(() => {
     submitRunIdRef.current += 1;
@@ -275,6 +293,7 @@ export const useForm = <T extends Record<string, unknown>>(
   );
 
   const submit = useCallback(async (): Promise<boolean> => {
+    setSubmitError(null);
     const valid = await validateFormFn();
     if (!valid) {
       return false;
@@ -304,10 +323,11 @@ export const useForm = <T extends Record<string, unknown>>(
         return false;
       }
       return true;
-    } catch {
+    } catch (error) {
       if (submitRunIdRef.current !== runId) {
         return false;
       }
+      setSubmitError(error);
       return false;
     } finally {
       if (submitRunIdRef.current === runId) {
@@ -322,6 +342,7 @@ export const useForm = <T extends Record<string, unknown>>(
     setValues(initialValues);
     setErrors({});
     setTouched({});
+    setSubmitError(null);
     fieldValidationRunRef.current.clear();
   }, [cancelSubmit, initialValues]);
 
@@ -369,6 +390,8 @@ export const useForm = <T extends Record<string, unknown>>(
     touched,
     dirty,
     isSubmitting,
+    submitError,
+    clearSubmitError,
     setFieldValue,
     blurField,
     register,

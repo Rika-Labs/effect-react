@@ -7,7 +7,12 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@effect-react/react": ["../dist"],
+      "@effect-react/react/*": ["../dist/*"]
+    }
   },
   "include": ["src", "server.ts"]
 }

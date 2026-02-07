@@ -228,6 +228,63 @@ describe("useInfiniteQuery", () => {
     await runtime.dispose();
   });
 
+  it("fetchNextPage reads fresh data from cache, not stale closure", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const cache = new QueryCache();
+
+    const pages: Record<number, string[]> = {
+      0: ["a"],
+      1: ["b"],
+      2: ["c"],
+    };
+
+    let fetchNextRef: (() => Promise<void>) | null = null;
+
+    const Probe = () => {
+      const result = useInfiniteQuery<string[], never, never, number>({
+        key: ["fresh-data"],
+        query: ({ pageParam }) => Effect.succeed(pages[pageParam] ?? []),
+        getNextPageParam: (_lastPage, allPages) => {
+          const next = allPages.length;
+          return next < 3 ? next : undefined;
+        },
+        initialPageParam: 0,
+      });
+      fetchNextRef = result.fetchNextPage;
+      return (
+        <div>
+          <div data-testid="status">{result.status}</div>
+          <div data-testid="pages">{result.data?.pages.length ?? 0}</div>
+          <div data-testid="items">{result.data?.pages.flat().join(",") ?? ""}</div>
+        </div>
+      );
+    };
+
+    render(
+      <EffectProvider runtime={runtime} cache={cache}>
+        <Probe />
+      </EffectProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("success");
+    });
+    expect(screen.getByTestId("items").textContent).toBe("a");
+
+    await act(async () => {
+      await fetchNextRef!();
+    });
+    expect(screen.getByTestId("items").textContent).toBe("a,b");
+
+    await act(async () => {
+      await fetchNextRef!();
+    });
+    expect(screen.getByTestId("pages").textContent).toBe("3");
+    expect(screen.getByTestId("items").textContent).toBe("a,b,c");
+
+    await runtime.dispose();
+  });
+
   it("does not fetch when disabled", async () => {
     const runtime = ManagedRuntime.make(Layer.empty);
     const cache = new QueryCache();

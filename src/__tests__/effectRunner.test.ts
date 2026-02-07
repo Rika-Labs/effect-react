@@ -19,16 +19,18 @@ describe("runEffect", () => {
     let acquired = 0;
     let finalized = 0;
 
-    const effect = Effect.acquireRelease(
-      Effect.sync(() => {
-        acquired += 1;
-        return "resource";
-      }),
-      () =>
+    const effect = Effect.scoped(
+      Effect.acquireRelease(
         Effect.sync(() => {
-          finalized += 1;
+          acquired += 1;
+          return "resource";
         }),
-    ).pipe(Effect.andThen(Effect.never));
+        () =>
+          Effect.sync(() => {
+            finalized += 1;
+          }),
+      ).pipe(Effect.andThen(Effect.never)),
+    );
 
     const handle = runEffect(runtime, effect);
     while (acquired === 0) {
@@ -40,6 +42,17 @@ describe("runEffect", () => {
     const exit = await handle.promise;
     expect(Exit.isFailure(exit)).toBe(true);
     expect(finalized).toBe(1);
+    await runtime.dispose();
+  });
+
+  it("does not force-scope effects, allowing the runtime to provide services", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const handle = runEffect(runtime, Effect.succeed("no-scope"));
+    const exit = await handle.promise;
+    expect(Exit.isSuccess(exit)).toBe(true);
+    if (Exit.isSuccess(exit)) {
+      expect(exit.value).toBe("no-scope");
+    }
     await runtime.dispose();
   });
 });

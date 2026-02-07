@@ -43,20 +43,14 @@ export function TaskList() {
         </button>
       </div>
 
-      {status === "loading" && (
-        <p style={{ color: "#94a3b8" }}>Loading tasks...</p>
-      )}
+      {status === "loading" && <p style={{ color: "#94a3b8" }}>Loading tasks...</p>}
 
-      {status === "failure" && (
-        <p style={{ color: "#f87171" }}>Failed to load tasks.</p>
-      )}
+      {status === "failure" && <p style={{ color: "#f87171" }}>Failed to load tasks.</p>}
 
       {(status === "success" || status === "refreshing") && data && (
         <>
           {data.length === 0 ? (
-            <p style={{ color: "#94a3b8" }}>
-              No tasks yet. Create one above!
-            </p>
+            <p style={{ color: "#94a3b8" }}>No tasks yet. Create one above!</p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               {data.map((task) => (
