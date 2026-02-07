@@ -101,7 +101,7 @@ export const useMutation = <V, A, E, R>(
   );
 
   const mutate = useCallback(
-    (variables: V) =>
+    (variables: V): Promise<A> =>
       runEffectWithSquashedCause(
         Effect.gen(function* () {
           runIdRef.current += 1;
@@ -132,7 +132,7 @@ export const useMutation = <V, A, E, R>(
             catch: (cause) => cause,
           });
           if (runIdRef.current !== runId) {
-            return exit;
+            return yield* Effect.fail(new Error("Mutation superseded"));
           }
           handleRef.current = null;
 
@@ -155,7 +155,7 @@ export const useMutation = <V, A, E, R>(
             if (optionsRef.current.onSettled) {
               yield* fromMaybePromiseEffect(() => optionsRef.current.onSettled!(result, variables));
             }
-            return exit;
+            return exit.value;
           }
 
           const cause = exit.cause as Cause.Cause<E>;
@@ -173,7 +173,7 @@ export const useMutation = <V, A, E, R>(
           if (optionsRef.current.onSettled) {
             yield* fromMaybePromiseEffect(() => optionsRef.current.onSettled!(result, variables));
           }
-          return exit;
+          return yield* Effect.fail(Cause.squash(cause));
         }),
       ),
     [cache, runtime, setSnapshot],

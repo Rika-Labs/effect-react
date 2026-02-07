@@ -9,6 +9,8 @@ const SOURCE_EXTENSION = /\.(ts|tsx)$/;
 const SKIP_FILES = new Set<string>([
   // This checker embeds forbidden tokens as regex literals.
   "scripts/check-effect-standards.ts",
+  // Doc-link checker uses async/await for file I/O.
+  "scripts/check-doc-links.ts",
 ]);
 
 const ALLOW_ASYNC_AWAIT = new Set<string>([

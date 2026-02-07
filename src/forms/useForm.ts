@@ -316,7 +316,11 @@ export const useForm = <T extends Record<string, unknown>>(
           return false;
         }
         submitHandleRef.current = null;
-        return Exit.isSuccess(exit);
+        if (Exit.isFailure(exit)) {
+          setSubmitError(Cause.squash(exit.cause));
+          return false;
+        }
+        return true;
       }
       await runEffectWithSquashedCause(fromMaybePromiseEffect(() => submitResult));
       if (submitRunIdRef.current !== runId) {

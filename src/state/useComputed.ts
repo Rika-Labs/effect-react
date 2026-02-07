@@ -22,6 +22,10 @@ export const useComputed = <A, S>(
   const valuesRef = useRef<A[]>([...initials]);
   const storeRef = useRef(createExternalStore<S>(compute(...initials)));
   const handlesRef = useRef<EffectRunHandle<void, unknown>[]>([]);
+  const computeRef = useRef(compute);
+  const equalsRef = useRef(equals);
+  computeRef.current = compute;
+  equalsRef.current = equals;
 
   const getSnapshot = useCallback(() => storeRef.current.getSnapshot(), []);
   const subscribe = useCallback((listener: () => void) => storeRef.current.subscribe(listener), []);
@@ -35,9 +39,9 @@ export const useComputed = <A, S>(
     valuesRef.current = [...initials];
 
     const recompute = () => {
-      const next = compute(...valuesRef.current);
+      const next = computeRef.current(...valuesRef.current);
       const prev = storeRef.current.getSnapshot();
-      if (!equals(prev, next)) {
+      if (!equalsRef.current(prev, next)) {
         storeRef.current.setSnapshot(next);
       }
     };
@@ -63,7 +67,7 @@ export const useComputed = <A, S>(
       }
       handlesRef.current = [];
     };
-  }, [compute, equals, initials, refs, runtime]);
+  }, [initials, refs, runtime]);
 
   return value;
 };

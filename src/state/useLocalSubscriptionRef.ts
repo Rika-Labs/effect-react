@@ -68,13 +68,14 @@ export const useLocalSubscriptionRef = <A, S = A>(
   }, [initial, pushSelected]);
 
   useEffect(() => {
-    let active = true;
     if (refRef.current !== null) {
-      return () => {
-        active = false;
-      };
+      if (!ready) {
+        setReady(true);
+      }
+      return;
     }
 
+    let active = true;
     const handle = runEffect(runtime, SubscriptionRef.make(initial));
     createHandleRef.current = handle as EffectRunHandle<
       SubscriptionRef.SubscriptionRef<A>,
@@ -88,23 +89,24 @@ export const useLocalSubscriptionRef = <A, S = A>(
       }),
       {
         onExit: (exit) => {
-          if (!active || Exit.isFailure(exit)) {
+          if (Exit.isFailure(exit)) {
             return;
           }
           if (!Exit.isSuccess(exit.value)) {
             return;
           }
           refRef.current = exit.value.value;
-          setReady(true);
+          if (active) {
+            setReady(true);
+          }
         },
       },
     );
 
     return () => {
       active = false;
-      handle.cancel();
     };
-  }, [initial, runtime]);
+  }, [initial, ready, runtime]);
 
   useEffect(() => {
     if (!ready || refRef.current === null) {

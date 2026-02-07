@@ -105,15 +105,14 @@ export const createPersistenceStore = <A>(
   const loadEffect = (): Effect.Effect<A | undefined, unknown, never> =>
     fromMaybePromiseEffect(() => options.storage.getItem(options.key)).pipe(
       Effect.mapError((cause) => persistenceError("load", options.key, cause)),
-      Effect.map((encoded) => {
+      Effect.flatMap((encoded) => {
         if (encoded === null) {
-          return undefined;
+          return Effect.succeed(undefined);
         }
-        try {
-          return codec.decode(encoded);
-        } catch {
-          return undefined;
-        }
+        return Effect.try({
+          try: () => codec.decode(encoded),
+          catch: (cause) => persistenceError("load", options.key, cause),
+        });
       }),
     );
 

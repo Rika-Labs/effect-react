@@ -135,7 +135,12 @@ export const useSubscriptionRef = <A, S = A>(
           if (Exit.isFailure(exit)) {
             yield* Effect.fail(new Error("SubscriptionRef update failed"));
           }
-          const next = updater(prev);
+          const readHandle = runEffect(runtime, SubscriptionRef.get(ref));
+          const readExit = yield* Effect.tryPromise({
+            try: () => readHandle.promise,
+            catch: (cause) => cause,
+          });
+          const next = Exit.isSuccess(readExit) ? readExit.value : updater(prev);
           yield* Effect.sync(() => {
             pushSelected(next);
             runMiddlewares(next, prev);

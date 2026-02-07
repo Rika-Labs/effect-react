@@ -18,7 +18,21 @@ export function TaskFilters() {
 
   return (
     <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+      <label
+        htmlFor="status-filter"
+        style={{
+          position: "absolute",
+          width: 1,
+          height: 1,
+          overflow: "hidden",
+          clip: "rect(0,0,0,0)",
+        }}
+      >
+        Filter by status
+      </label>
       <select
+        id="status-filter"
+        aria-label="Filter by status"
         value={filters.status}
         onChange={(e) => set({ ...filters, status: e.target.value as typeof filters.status })}
         style={inputStyle}
@@ -29,8 +43,22 @@ export function TaskFilters() {
         <option value="done">Done</option>
       </select>
 
+      <label
+        htmlFor="search-input"
+        style={{
+          position: "absolute",
+          width: 1,
+          height: 1,
+          overflow: "hidden",
+          clip: "rect(0,0,0,0)",
+        }}
+      >
+        Search tasks
+      </label>
       <input
+        id="search-input"
         type="text"
+        aria-label="Search tasks"
         placeholder="Search tasks..."
         value={filters.search}
         onChange={(e) => set({ ...filters, search: e.target.value })}

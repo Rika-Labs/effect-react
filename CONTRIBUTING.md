@@ -19,18 +19,18 @@ bun run check
 
 ## Development Scripts
 
-| Script                 | Description                                                        |
-| ---------------------- | ------------------------------------------------------------------ |
-| `bun run check`        | Run all checks (format, lint, typecheck, effect:check, test, size) |
-| `bun run test`         | Run tests with coverage                                            |
-| `bun run test:watch`   | Run tests in watch mode                                            |
-| `bun run lint`         | Lint with oxlint (type-aware, deny warnings)                       |
-| `bun run lint:fix`     | Lint and auto-fix                                                  |
-| `bun run format`       | Format with oxfmt                                                  |
-| `bun run format:check` | Check formatting                                                   |
-| `bun run typecheck`    | Type-check with tsgo                                               |
-| `bun run size:check`   | Build and verify bundle size                                       |
-| `bun run build`        | Build with tsup (ESM + CJS) + tsc (.d.ts)                          |
+| Script                 | Description                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------ |
+| `bun run check`        | Run all checks (format, lint, typecheck, effect:check, test, size, docs:check) |
+| `bun run test`         | Run tests with coverage                                                        |
+| `bun run test:watch`   | Run tests in watch mode                                                        |
+| `bun run lint`         | Lint with oxlint (type-aware, deny warnings)                                   |
+| `bun run lint:fix`     | Lint and auto-fix                                                              |
+| `bun run format`       | Format with oxfmt                                                              |
+| `bun run format:check` | Check formatting                                                               |
+| `bun run typecheck`    | Type-check with tsgo                                                           |
+| `bun run size:check`   | Build and verify bundle size                                                   |
+| `bun run build`        | Build with tsup (ESM + CJS) + tsc (.d.ts)                                      |
 
 ## Toolchain
 
@@ -118,7 +118,7 @@ describe("myFunction", () => {
    ```bash
    bun run check
    ```
-   This runs formatting, linting, type checking, Effect standards checking, tests, and bundle size verification in sequence.
+   This runs formatting, linting, type checking, Effect standards checking, tests, bundle size verification, and documentation checks in sequence.
 4. **Push and open a PR** against `main`. Describe what your change does and why.
 5. **Address review feedback** -- Keep commits focused and easy to review.
 

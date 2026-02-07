@@ -133,4 +133,96 @@ describe("url-state", () => {
     });
     expect(window.location.search).toBe("?page=4");
   });
+
+  it("debounced writes coalesce rapid updates for useUrlState", async () => {
+    vi.useFakeTimers();
+    window.history.replaceState(null, "", "/items?page=1");
+
+    let setPage: ((update: number | undefined) => void) | undefined;
+
+    const Probe = () => {
+      const [page, setValue] = useUrlState("page", numberCodec, {
+        historyMode: "replace",
+        debounceMs: 50,
+      });
+      setPage = setValue as (update: number | undefined) => void;
+      return <div data-testid="page">{Number(page ?? 0)}</div>;
+    };
+
+    render(<Probe />);
+
+    await act(async () => {
+      setPage?.(2);
+      vi.advanceTimersByTime(10);
+      setPage?.(3);
+      vi.advanceTimersByTime(10);
+      setPage?.(4);
+    });
+    expect(window.location.search).toBe("?page=1");
+
+    await act(async () => {
+      vi.advanceTimersByTime(50);
+    });
+    expect(window.location.search).toBe("?page=4");
+  });
+
+  it("debounced writes work for useUrlStates", async () => {
+    vi.useFakeTimers();
+    window.history.replaceState(null, "", "/items?page=1");
+
+    let setValues:
+      | ((
+          update:
+            | { readonly page?: number; readonly tab?: number }
+            | ((previous: { readonly page?: number; readonly tab?: number }) => {
+                readonly page?: number;
+                readonly tab?: number;
+              }),
+        ) => void)
+      | undefined;
+
+    const Probe = () => {
+      const [value, setValue] = useUrlStates(schema, {
+        historyMode: "replace",
+        debounceMs: 30,
+      });
+      setValues = setValue;
+      return <div data-testid="page">{Number(value["page"] ?? 0)}</div>;
+    };
+
+    render(<Probe />);
+
+    await act(async () => {
+      setValues?.({ page: 5, tab: 1 });
+      vi.advanceTimersByTime(10);
+    });
+    expect(window.location.search).toBe("?page=1");
+
+    await act(async () => {
+      vi.advanceTimersByTime(30);
+    });
+    expect(window.location.search).toContain("page=5");
+  });
+
+  it("clears url param when setting to undefined", async () => {
+    window.history.replaceState(null, "", "/items?page=5");
+
+    let setPage: ((update: number | undefined) => void) | undefined;
+
+    const Probe = () => {
+      const [page, setValue] = useUrlState("page", numberCodec, {
+        historyMode: "replace",
+      });
+      setPage = setValue as (update: number | undefined) => void;
+      return <div data-testid="page">{String(page ?? "none")}</div>;
+    };
+
+    render(<Probe />);
+    expect(screen.getByTestId("page").textContent).toBe("5");
+
+    await act(async () => {
+      setPage?.(undefined);
+    });
+    expect(window.location.search).toBe("");
+  });
 });

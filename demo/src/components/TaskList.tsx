@@ -29,6 +29,8 @@ export function TaskList() {
         <h2 style={{ fontSize: "1.1rem", fontWeight: 600 }}>Tasks</h2>
         <button
           onClick={() => refetch()}
+          aria-label="Refresh task list"
+          tabIndex={0}
           style={{
             padding: "0.25rem 0.75rem",
             background: "#334155",

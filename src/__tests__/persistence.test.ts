@@ -25,7 +25,7 @@ describe("persistence primitives", () => {
     await expect(store.load()).resolves.toBeUndefined();
   });
 
-  it("returns undefined when decode fails", async () => {
+  it("rejects when decode fails", async () => {
     const storage = createMemoryStorage();
     const store = createPersistenceStore<number>({
       key: "bad",
@@ -39,7 +39,7 @@ describe("persistence primitives", () => {
     });
 
     await storage.setItem("bad", "x");
-    await expect(store.load()).resolves.toBeUndefined();
+    await expect(store.load()).rejects.toBeDefined();
   });
 
   it("persists and hydrates query state", async () => {

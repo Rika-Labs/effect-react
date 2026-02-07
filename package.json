@@ -208,11 +208,7 @@
   "dependencies": {
     "@effect/cli": "0.73.2",
     "@effect/platform-node": "0.104.1",
-    "effect": "3.19.16",
-    "magic-string": "^0.30.19",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
-    "typescript": "^5.9.2"
+    "magic-string": "^0.30.19"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.0",
@@ -221,13 +217,22 @@
     "@types/react-dom": "^19.1.6",
     "@typescript/native-preview": "^7.0.0-dev.20260205.1",
     "@vitest/coverage-v8": "^2.1.9",
+    "effect": "3.19.16",
     "jsdom": "^25.0.1",
     "markdownlint-cli2": "^0.20.0",
     "oxfmt": "^0.28.0",
     "oxlint": "^1.43.0",
     "oxlint-tsgolint": "^0.11.4",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
     "tsup": "^8.3.5",
+    "typescript": "^5.9.2",
     "vite": "^7.3.1",
     "vitest": "^2.1.9"
+  },
+  "peerDependencies": {
+    "effect": "^3.19.16",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
   }
 }

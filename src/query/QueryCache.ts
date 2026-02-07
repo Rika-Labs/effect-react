@@ -66,6 +66,7 @@ export interface QueryEntry<A, E> {
   staleTimer: ReturnType<typeof setTimeout> | undefined;
   gcTimer: ReturnType<typeof setTimeout> | undefined;
   lastFetch: LastFetchSnapshot | undefined;
+  latestRuntime: EffectRuntime | undefined;
   store: ExternalStore<QueryResult<A, E>>;
 }
 
@@ -210,6 +211,7 @@ export class QueryCache {
       staleTimer: undefined,
       gcTimer: undefined,
       lastFetch: undefined,
+      latestRuntime: undefined,
       store: createExternalStore<QueryResult<A, E>>(initial),
     };
 
@@ -275,6 +277,7 @@ export class QueryCache {
             ...(options.keyHasher !== undefined ? { keyHasher: options.keyHasher } : {}),
           });
         this.applyDurations(entry, options.staleTime, options.gcTime);
+        entry.latestRuntime = options.runtime;
         entry.lastFetch = {
           key: options.key,
           query: options.query as Effect.Effect<unknown, unknown, unknown>,
@@ -400,11 +403,12 @@ export class QueryCache {
       const snapshot = entry.store.getSnapshot();
       entry.store.setSnapshot({ ...snapshot, isStale: true });
       if (entry.subscribers > 0 && entry.lastFetch !== undefined) {
+        const freshRuntime = entry.latestRuntime ?? entry.lastFetch.runtime;
         void this.fetch({
           entry: entry as QueryEntry<unknown, unknown>,
           key: entry.lastFetch.key,
           query: entry.lastFetch.query,
-          runtime: entry.lastFetch.runtime,
+          runtime: freshRuntime,
           ...(entry.lastFetch.staleTime !== undefined
             ? { staleTime: entry.lastFetch.staleTime }
             : {}),

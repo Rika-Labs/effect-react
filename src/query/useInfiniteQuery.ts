@@ -132,11 +132,15 @@ export const useInfiniteQuery = <A, E, R, P = unknown>(
           yield* cache.fetchEffect({
             entry: entry as QueryEntry<InfiniteData<A, P>, E>,
             key: stableKey.current,
-            query: Effect.map(
-              query({ pageParam: nextParam }),
-              (page): InfiniteData<A, P> => ({
-                pages: [...freshData.pages, page],
-                pageParams: [...freshData.pageParams, nextParam],
+            query: Effect.flatMap(query({ pageParam: nextParam }), (page) =>
+              Effect.sync((): InfiniteData<A, P> => {
+                const latest = cache.getSnapshot(entry).data as InfiniteData<A, P> | undefined;
+                const pages = latest?.pages ?? freshData.pages;
+                const pageParams = latest?.pageParams ?? freshData.pageParams;
+                return {
+                  pages: [...pages, page],
+                  pageParams: [...pageParams, nextParam],
+                };
               }),
             ),
             runtime,
@@ -183,11 +187,15 @@ export const useInfiniteQuery = <A, E, R, P = unknown>(
           yield* cache.fetchEffect({
             entry: entry as QueryEntry<InfiniteData<A, P>, E>,
             key: stableKey.current,
-            query: Effect.map(
-              query({ pageParam: prevParam }),
-              (page): InfiniteData<A, P> => ({
-                pages: [page, ...freshData.pages],
-                pageParams: [prevParam, ...freshData.pageParams],
+            query: Effect.flatMap(query({ pageParam: prevParam }), (page) =>
+              Effect.sync((): InfiniteData<A, P> => {
+                const latest = cache.getSnapshot(entry).data as InfiniteData<A, P> | undefined;
+                const pages = latest?.pages ?? freshData.pages;
+                const pageParams = latest?.pageParams ?? freshData.pageParams;
+                return {
+                  pages: [page, ...pages],
+                  pageParams: [prevParam, ...pageParams],
+                };
               }),
             ),
             runtime,

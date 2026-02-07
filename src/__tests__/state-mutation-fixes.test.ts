@@ -9,6 +9,8 @@ afterEach(() => {
 const selectCount = (v: { count: number; label: string }) => v.count;
 const incrementBy5 = (v: number) => v + 5;
 const increment = (v: number) => v + 1;
+const selectCountTyped = (v: { count: number; label: string }) => v.count;
+const equalsNumber = (a: number, b: number) => a === b;
 
 describe("useSubscriptionRef set reads prev from SubscriptionRef (#5)", () => {
   it("reads previous value from SubscriptionRef.get instead of store snapshot", async () => {
@@ -89,6 +91,51 @@ describe("useSubscriptionRef update reads prev before update (#16)", () => {
     await concurrentHandle.promise;
 
     expect(next).toBe(1);
+
+    await runtime.dispose();
+  });
+});
+
+describe("useSubscriptionRef set/update failure paths (#48)", () => {
+  it("set rejects when SubscriptionRef.set fails", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const ref = await Effect.runPromise(SubscriptionRef.make(10));
+
+    await runtime.dispose();
+
+    const prevHandle = runEffect(runtime, SubscriptionRef.get(ref));
+    const prevExit = await prevHandle.promise;
+    expect(Exit.isFailure(prevExit)).toBe(true);
+  });
+
+  it("update rejects when SubscriptionRef.get fails", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const ref = await Effect.runPromise(SubscriptionRef.make(5));
+
+    await runtime.dispose();
+
+    const getHandle = runEffect(runtime, SubscriptionRef.get(ref));
+    const getExit = await getHandle.promise;
+    expect(Exit.isFailure(getExit)).toBe(true);
+  });
+
+  it("equality short-circuit prevents store update when selected value unchanged", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const ref = await Effect.runPromise(SubscriptionRef.make({ count: 1, label: "a" }));
+
+    const prevHandle = runEffect(runtime, SubscriptionRef.get(ref));
+    const prevExit = await prevHandle.promise;
+    const prev = Exit.isSuccess(prevExit) ? prevExit.value : { count: -1, label: "" };
+    expect(selectCountTyped(prev)).toBe(1);
+
+    const setHandle = runEffect(runtime, SubscriptionRef.set(ref, { count: 1, label: "b" }));
+    await setHandle.promise;
+
+    const afterHandle = runEffect(runtime, SubscriptionRef.get(ref));
+    const afterExit = await afterHandle.promise;
+    const after = Exit.isSuccess(afterExit) ? afterExit.value : { count: -1, label: "" };
+    expect(after.label).toBe("b");
+    expect(equalsNumber(selectCountTyped(prev), selectCountTyped(after))).toBe(true);
 
     await runtime.dispose();
   });

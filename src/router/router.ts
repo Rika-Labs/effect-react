@@ -360,7 +360,7 @@ export const createRouter = <TRoutes extends readonly AnyRoute[]>(
     return Effect.runPromise(runLoadersEffect(runOptions));
   };
 
-  history.subscribe(() => {
+  const unsubscribeHistory = history.subscribe(() => {
     syncSnapshot();
     void runLoaders();
   });
@@ -405,6 +405,7 @@ export const createRouter = <TRoutes extends readonly AnyRoute[]>(
     match,
     revalidate: (runOptions) => runLoaders(runOptions),
     dispose: () => {
+      unsubscribeHistory();
       activeLoaderHandle?.cancel();
       activeLoaderHandle = null;
     },

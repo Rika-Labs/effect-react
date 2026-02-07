@@ -279,4 +279,195 @@ describe("table + virtual", () => {
       expect(screen.getByTestId("col-size").textContent).toBe("25");
     });
   });
+
+  it("returns empty state for zero-count virtual list", () => {
+    const list = createVirtualList({
+      count: 0,
+      estimateSize: () => 10,
+      scrollOffset: 0,
+      viewportSize: 100,
+    });
+    expect(list.items).toEqual([]);
+    expect(list.totalSize).toBe(0);
+    expect(list.range.startIndex).toBe(0);
+    expect(list.range.endIndex).toBe(0);
+  });
+
+  it("handles single-item virtual list", () => {
+    const list = createVirtualList({
+      count: 1,
+      estimateSize: () => 50,
+      scrollOffset: 0,
+      viewportSize: 100,
+      overscan: 0,
+    });
+    expect(list.items.length).toBe(1);
+    expect(list.items[0]!.size).toBe(50);
+    expect(list.totalSize).toBe(50);
+  });
+
+  it("normalizes non-finite sizes to zero", () => {
+    const list = createVirtualList({
+      count: 3,
+      estimateSize: (index) => {
+        if (index === 0) return Number.POSITIVE_INFINITY;
+        if (index === 1) return Number.NaN;
+        return 20;
+      },
+      scrollOffset: 0,
+      viewportSize: 100,
+      overscan: 0,
+    });
+    expect(list.totalSize).toBe(20);
+    expect(list.items.length).toBeGreaterThan(0);
+    const lastItem = list.items[list.items.length - 1]!;
+    expect(lastItem.index).toBe(2);
+    expect(lastItem.size).toBe(20);
+  });
+
+  it("uses measuredSizes to override estimateSize", () => {
+    const list = createVirtualList({
+      count: 3,
+      estimateSize: () => 10,
+      scrollOffset: 0,
+      viewportSize: 100,
+      measuredSizes: { 1: 50 },
+    });
+    expect(list.items[0]!.size).toBe(10);
+    expect(list.items[1]!.size).toBe(50);
+    expect(list.items[2]!.size).toBe(10);
+    expect(list.totalSize).toBe(70);
+  });
+
+  it("creates virtual grid with measured row and column sizes", () => {
+    const grid = createVirtualGrid({
+      rowCount: 3,
+      columnCount: 3,
+      estimateRowSize: () => 10,
+      estimateColumnSize: () => 10,
+      scrollTop: 0,
+      scrollLeft: 0,
+      viewportHeight: 100,
+      viewportWidth: 100,
+      measuredRowSizes: { 0: 25 },
+      measuredColumnSizes: { 1: 30 },
+    });
+    expect(grid.rows.items[0]!.size).toBe(25);
+    expect(grid.columns.items[1]!.size).toBe(30);
+  });
+
+  it("uses custom filter function on table columns", () => {
+    const filterColumns: readonly TableColumn<UserRow, unknown>[] = [
+      {
+        id: "id",
+        accessor: (row) => row.id,
+        filter: (value, query) => String(value).startsWith(query),
+      },
+      {
+        id: "score",
+        accessor: (row) => row.score,
+      },
+    ];
+
+    const model = createTableModel({
+      data: [
+        { id: "alpha", score: 1 },
+        { id: "beta", score: 2 },
+        { id: "apex", score: 3 },
+      ],
+      columns: filterColumns,
+      state: createTableState({ globalFilter: "a" }),
+    });
+
+    expect(model.rows.map((r) => r.original.id)).toEqual(["alpha", "apex"]);
+  });
+
+  it("returns rows unchanged when sort references missing column", () => {
+    const model = createTableModel({
+      data: [
+        { id: "b", score: 2 },
+        { id: "a", score: 1 },
+      ],
+      columns,
+      state: createTableState({ sort: { columnId: "nonexistent" } }),
+    });
+    expect(model.rows.map((r) => r.original.id)).toEqual(["b", "a"]);
+  });
+
+  it("uses default string comparator when column has no custom sort", () => {
+    const noSortColumns: readonly TableColumn<UserRow, unknown>[] = [
+      { id: "id", accessor: (row) => row.id },
+      { id: "score", accessor: (row) => row.score },
+    ];
+
+    const model = createTableModel({
+      data: [
+        { id: "c", score: 3 },
+        { id: "a", score: 1 },
+        { id: "b", score: 2 },
+      ],
+      columns: noSortColumns,
+      state: createTableState({ sort: { columnId: "id" } }),
+    });
+    expect(model.rows.map((r) => r.original.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("sorts descending when desc is true", () => {
+    const noSortColumns: readonly TableColumn<UserRow, unknown>[] = [
+      { id: "id", accessor: (row) => row.id },
+    ];
+
+    const model = createTableModel({
+      data: [
+        { id: "a", score: 1 },
+        { id: "c", score: 3 },
+        { id: "b", score: 2 },
+      ],
+      columns: noSortColumns,
+      state: createTableState({ sort: { columnId: "id", desc: true } }),
+    });
+    expect(model.rows.map((r) => r.original.id)).toEqual(["c", "b", "a"]);
+  });
+
+  it("handles equal values in default comparator", () => {
+    const noSortColumns: readonly TableColumn<UserRow, unknown>[] = [
+      { id: "id", accessor: (row) => row.id },
+    ];
+
+    const model = createTableModel({
+      data: [
+        { id: "a", score: 1 },
+        { id: "a", score: 2 },
+      ],
+      columns: noSortColumns,
+      state: createTableState({ sort: { columnId: "id" } }),
+    });
+    expect(model.rows.length).toBe(2);
+    expect(model.rows[0]!.original.id).toBe("a");
+    expect(model.rows[1]!.original.id).toBe("a");
+  });
+
+  it("paginates correctly with zero items", () => {
+    const model = createTableModel({
+      data: [],
+      columns,
+      state: createTableState({ pageIndex: 0, pageSize: 10 }),
+    });
+    expect(model.rows).toEqual([]);
+    expect(model.pageRows).toEqual([]);
+    expect(model.pageCount).toBe(1);
+  });
+
+  it("defaults getRowId to index-based ids", () => {
+    const model = createTableModel({
+      data: [
+        { id: "x", score: 1 },
+        { id: "y", score: 2 },
+      ],
+      columns,
+      state: createTableState(),
+    });
+    expect(model.rows[0]!.id).toBe("0");
+    expect(model.rows[1]!.id).toBe("1");
+  });
 });

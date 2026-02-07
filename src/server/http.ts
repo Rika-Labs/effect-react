@@ -96,11 +96,10 @@ export const createServerActionHttpHandlerEffect = (
 
       return createJsonResponse(200, result);
     }).pipe(
-      Effect.catchAllCause((cause) =>
+      Effect.catchAllCause((_cause) =>
         Effect.succeed(
           createJsonResponse(500, {
             error: "Internal Server Error",
-            defect: Cause.pretty(cause),
           }),
         ),
       ),
@@ -173,11 +172,10 @@ export const createRequestScopedServerActionHttpHandlerEffect = (
 
       return createJsonResponse(200, result);
     }).pipe(
-      Effect.catchAllCause((cause) =>
+      Effect.catchAllCause((_cause) =>
         Effect.succeed(
           createJsonResponse(500, {
             error: "Internal Server Error",
-            defect: Cause.pretty(cause),
           }),
         ),
       ),

@@ -235,9 +235,35 @@ export const useEventSourceStream = <T = string>(options: UseEventSourceStreamOp
     let attempt = 0;
     let active = true;
 
+    const cleanupSource = (
+      source: EventSource,
+      handlers: {
+        open: (e: Event) => void;
+        message: (e: Event) => void;
+        error: (e: Event) => void;
+      },
+    ) => {
+      source.removeEventListener("open", handlers.open);
+      source.removeEventListener("message", handlers.message);
+      source.removeEventListener("error", handlers.error);
+      source.close();
+    };
+
+    let activeHandlers: {
+      source: EventSource;
+      open: (e: Event) => void;
+      message: (e: Event) => void;
+      error: (e: Event) => void;
+    } | null = null;
+
     const connect = () => {
       if (!active) {
         return;
+      }
+
+      if (activeHandlers !== null) {
+        cleanupSource(activeHandlers.source, activeHandlers);
+        activeHandlers = null;
       }
 
       const source =
@@ -260,7 +286,10 @@ export const useEventSourceStream = <T = string>(options: UseEventSourceStreamOp
 
       const onSourceError = (event: Event) => {
         onErrorRef.current?.(event);
-        source.close();
+        if (activeHandlers !== null) {
+          cleanupSource(activeHandlers.source, activeHandlers);
+          activeHandlers = null;
+        }
         if (!active || !reconnect) {
           return;
         }
@@ -271,6 +300,12 @@ export const useEventSourceStream = <T = string>(options: UseEventSourceStreamOp
         }, waitMs);
       };
 
+      activeHandlers = {
+        source,
+        open: onSourceOpen,
+        message: onSourceMessage,
+        error: onSourceError,
+      };
       source.addEventListener("open", onSourceOpen);
       source.addEventListener("message", onSourceMessage);
       source.addEventListener("error", onSourceError);
@@ -280,7 +315,10 @@ export const useEventSourceStream = <T = string>(options: UseEventSourceStreamOp
 
     return () => {
       active = false;
-      sourceRef.current?.close();
+      if (activeHandlers !== null) {
+        cleanupSource(activeHandlers.source, activeHandlers);
+        activeHandlers = null;
+      }
       sourceRef.current = null;
       if (reconnectTimerRef.current !== undefined) {
         clearTimeout(reconnectTimerRef.current);
@@ -359,9 +397,38 @@ export const useWebSocketStream = <T = string>(
     let attempt = 0;
     let active = true;
 
+    const cleanupSocket = (
+      socket: WebSocket,
+      handlers: {
+        open: (e: Event) => void;
+        message: (e: Event) => void;
+        error: (e: Event) => void;
+        close: (e: Event) => void;
+      },
+    ) => {
+      socket.removeEventListener("open", handlers.open);
+      socket.removeEventListener("message", handlers.message);
+      socket.removeEventListener("error", handlers.error);
+      socket.removeEventListener("close", handlers.close);
+      socket.close();
+    };
+
+    let activeHandlers: {
+      socket: WebSocket;
+      open: (e: Event) => void;
+      message: (e: Event) => void;
+      error: (e: Event) => void;
+      close: (e: Event) => void;
+    } | null = null;
+
     const connect = () => {
       if (!active) {
         return;
+      }
+
+      if (activeHandlers !== null) {
+        cleanupSocket(activeHandlers.socket, activeHandlers);
+        activeHandlers = null;
       }
 
       const socket = new WebSocket(url);
@@ -386,6 +453,14 @@ export const useWebSocketStream = <T = string>(
 
       const onSocketClose = (event: Event) => {
         setConnected(false);
+        if (activeHandlers !== null) {
+          const { socket: s, ...h } = activeHandlers;
+          s.removeEventListener("open", h.open);
+          s.removeEventListener("message", h.message);
+          s.removeEventListener("error", h.error);
+          s.removeEventListener("close", h.close);
+          activeHandlers = null;
+        }
         if (event instanceof CloseEvent) {
           onCloseRef.current?.(event);
         }
@@ -399,6 +474,13 @@ export const useWebSocketStream = <T = string>(
         }, waitMs);
       };
 
+      activeHandlers = {
+        socket,
+        open: onSocketOpen,
+        message: onSocketMessage,
+        error: onSocketError,
+        close: onSocketClose,
+      };
       socket.addEventListener("open", onSocketOpen);
       socket.addEventListener("message", onSocketMessage);
       socket.addEventListener("error", onSocketError);
@@ -409,7 +491,12 @@ export const useWebSocketStream = <T = string>(
 
     return () => {
       active = false;
-      socketRef.current?.close();
+      if (activeHandlers !== null) {
+        cleanupSocket(activeHandlers.socket, activeHandlers);
+        activeHandlers = null;
+      } else {
+        socketRef.current?.close();
+      }
       socketRef.current = null;
       setConnected(false);
       if (reconnectTimerRef.current !== undefined) {

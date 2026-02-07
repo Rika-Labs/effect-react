@@ -1,11 +1,18 @@
+import { useRef } from "react";
 import { useForm } from "@effect-react/react/forms";
 import { useMutation } from "@effect-react/react/mutation";
+import { Cause } from "effect";
 import { createTask } from "../api";
 
 export function TaskForm() {
+  const titleRef = useRef<HTMLInputElement>(null);
+
   const mutation = useMutation({
     mutation: (data: { title: string; description: string; priority: string }) => createTask(data),
     invalidate: [["tasks"]],
+    onSuccess: () => {
+      titleRef.current?.focus();
+    },
   });
 
   const form = useForm({
@@ -31,6 +38,9 @@ export function TaskForm() {
     width: "100%",
   };
 
+  const mutationError =
+    mutation.status === "failure" && mutation.cause ? Cause.squash(mutation.cause).message : null;
+
   return (
     <div
       style={{
@@ -49,7 +59,22 @@ export function TaskForm() {
         style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}
       >
         <div>
+          <label
+            htmlFor="task-title"
+            style={{
+              position: "absolute",
+              width: 1,
+              height: 1,
+              overflow: "hidden",
+              clip: "rect(0,0,0,0)",
+            }}
+          >
+            Task title
+          </label>
           <input
+            ref={titleRef}
+            id="task-title"
+            aria-label="Task title"
             placeholder="Task title"
             value={form.values.title}
             onChange={(e) => form.setFieldValue("title", e.target.value)}
@@ -63,16 +88,52 @@ export function TaskForm() {
           )}
         </div>
 
-        <textarea
-          placeholder="Description (optional)"
-          value={form.values.description}
-          onChange={(e) => form.setFieldValue("description", e.target.value)}
-          rows={2}
-          style={{ ...inputStyle, resize: "vertical" }}
-        />
+        <div>
+          <label
+            htmlFor="task-description"
+            style={{
+              position: "absolute",
+              width: 1,
+              height: 1,
+              overflow: "hidden",
+              clip: "rect(0,0,0,0)",
+            }}
+          >
+            Description
+          </label>
+          <textarea
+            id="task-description"
+            aria-label="Description"
+            placeholder="Description (optional)"
+            value={form.values.description}
+            onChange={(e) => form.setFieldValue("description", e.target.value)}
+            rows={2}
+            style={{ ...inputStyle, resize: "vertical" }}
+          />
+        </div>
+
+        {mutationError && (
+          <p role="alert" style={{ color: "#f87171", fontSize: "0.85rem" }}>
+            {mutationError}
+          </p>
+        )}
 
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <label
+            htmlFor="task-priority"
+            style={{
+              position: "absolute",
+              width: 1,
+              height: 1,
+              overflow: "hidden",
+              clip: "rect(0,0,0,0)",
+            }}
+          >
+            Priority
+          </label>
           <select
+            id="task-priority"
+            aria-label="Priority"
             value={form.values.priority}
             onChange={(e) => form.setFieldValue("priority", e.target.value)}
             style={{ ...inputStyle, width: "auto" }}

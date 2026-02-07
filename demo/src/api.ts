@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import type { Task, TaskFilters } from "./types";
+import { validateTask, validateTaskArray } from "./types";
 
 export const fetchTasks = (filters: TaskFilters): Effect.Effect<readonly Task[], Error> =>
   Effect.tryPromise({
@@ -10,7 +11,7 @@ export const fetchTasks = (filters: TaskFilters): Effect.Effect<readonly Task[],
       const qs = params.toString();
       const res = await fetch(`/api/tasks${qs ? `?${qs}` : ""}`);
       if (!res.ok) throw new Error(`Failed to fetch tasks: ${res.status}`);
-      return (await res.json()) as Task[];
+      return validateTaskArray(await res.json());
     },
     catch: (e) => new Error(String(e)),
   });
@@ -28,7 +29,7 @@ export const createTask = (data: {
         body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error(`Failed to create task: ${res.status}`);
-      return (await res.json()) as Task;
+      return validateTask(await res.json());
     },
     catch: (e) => new Error(String(e)),
   });
@@ -45,7 +46,7 @@ export const updateTask = (
         body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error(`Failed to update task: ${res.status}`);
-      return (await res.json()) as Task;
+      return validateTask(await res.json());
     },
     catch: (e) => new Error(String(e)),
   });

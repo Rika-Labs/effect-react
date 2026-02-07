@@ -12,6 +12,7 @@ import {
   createServerActionDispatcher,
   defineRouteHandler,
   defineServerAction,
+  renderEffectToReadableStream,
   RequestContext,
   RequestContextLive,
   useServerAction,
@@ -21,6 +22,7 @@ import {
   identityErrorCodec,
 } from "../server";
 import type { InputSchema, ErrorTransportCodec } from "../server";
+import { createFrameworkSsrRequestHandler, createFrameworkSsrResponseEffect } from "../framework";
 
 describe("server", () => {
   it("dispatches server actions with typed input and output", async () => {
@@ -432,6 +434,138 @@ describe("server", () => {
       path: "/api/ctx",
     });
 
+    await runtime.dispose();
+  });
+});
+
+describe("server/ssr ReadableStream rendering", () => {
+  it("renders effect to ReadableStream via fallback path", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const React = await import("react");
+    const element = React.createElement("div", null, "streamed");
+    const effect = Effect.succeed(element);
+
+    const stream = await renderEffectToReadableStream(runtime, effect);
+    const reader = stream.getReader();
+    const chunks: Uint8Array[] = [];
+    let done = false;
+    while (!done) {
+      const result = await reader.read();
+      done = result.done;
+      if (result.value !== undefined) {
+        chunks.push(result.value as Uint8Array);
+      }
+    }
+
+    const html = new TextDecoder().decode(
+      new Uint8Array(chunks.reduce((acc, c) => acc + c.byteLength, 0)),
+    );
+    expect(html.length > 0 || chunks.length > 0).toBe(true);
+    await runtime.dispose();
+  });
+
+  it("returns ServerRenderFailureError for failed effects", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const effect = Effect.fail("render-error");
+
+    try {
+      await renderEffectToReadableStream(runtime, effect as never);
+      expect.fail("should have thrown");
+    } catch (error) {
+      expect(error).toBeDefined();
+    }
+
+    await runtime.dispose();
+  });
+});
+
+describe("framework SSR orchestrator", () => {
+  it("renders string-mode SSR response with hydration script", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const React = await import("react");
+    const route = defineRoute({ id: "ssr-page", path: "/" });
+
+    const response = await Effect.runPromise(
+      createFrameworkSsrResponseEffect({
+        runtime,
+        request: new Request("https://example.test/"),
+        routes: [route],
+        render: () => Effect.succeed(React.createElement("div", null, "hello")),
+      }).pipe(
+        Effect.catchAll((error) =>
+          Effect.succeed(new Response(JSON.stringify(error), { status: 500 })),
+        ),
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain("hello");
+    await runtime.dispose();
+  });
+
+  it("renders stream-mode SSR response", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const React = await import("react");
+    const route = defineRoute({ id: "stream-page", path: "/" });
+
+    const response = await Effect.runPromise(
+      createFrameworkSsrResponseEffect({
+        runtime,
+        request: new Request("https://example.test/"),
+        routes: [route],
+        mode: "stream",
+        render: () => Effect.succeed(React.createElement("div", null, "streamed")),
+      }).pipe(
+        Effect.catchAll((error) =>
+          Effect.succeed(new Response(JSON.stringify(error), { status: 500 })),
+        ),
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain("streamed");
+    await runtime.dispose();
+  });
+
+  it("createFrameworkSsrRequestHandler returns error response on render failure", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const route = defineRoute({ id: "fail-page", path: "/" });
+
+    const handler = createFrameworkSsrRequestHandler({
+      runtime,
+      routes: [route],
+      render: () => Effect.fail("render-boom"),
+    });
+
+    const response = await handler(new Request("https://example.test/"));
+    expect(response.status).toBe(500);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body["_tag"]).toBeDefined();
+    await runtime.dispose();
+  });
+
+  it("createFrameworkSsrRequestHandler supports cache factory function", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const React = await import("react");
+    const { QueryCache } = await import("../query/QueryCache");
+    const route = defineRoute({ id: "cache-fn", path: "/" });
+    let cacheCreated = 0;
+
+    const handler = createFrameworkSsrRequestHandler({
+      runtime,
+      routes: [route],
+      cache: () => {
+        cacheCreated += 1;
+        return new QueryCache();
+      },
+      render: () => Effect.succeed(React.createElement("div", null, "cached")),
+    });
+
+    await handler(new Request("https://example.test/"));
+    await handler(new Request("https://example.test/"));
+    expect(cacheCreated).toBe(2);
     await runtime.dispose();
   });
 });

@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 bun install                # Install dependencies
-bun run check              # Full CI: format + lint + typecheck + effect:check + test + size (run before pushing)
+bun run check              # Full CI: format + lint + typecheck + effect:check + test + size + docs:check (run before pushing)
 bun run test               # Run tests with coverage
 bun run test:watch         # Watch mode
 bunx vitest run src/__tests__/query.test.ts   # Run a single test file

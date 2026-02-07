@@ -3,6 +3,7 @@ import { Effect, Layer, ManagedRuntime } from "effect";
 import {
   NotFoundError,
   RedirectError,
+  asAnyRouteLoader,
   createMemoryRouterHistory,
   createRouter,
   defineRoute,
@@ -350,6 +351,140 @@ describe("router core", () => {
     router.navigatePath("/nav/2");
     router.navigatePath("/nav/3");
     expect(router.getSnapshot().pathname).toBe("/nav/3");
+
+    router.dispose();
+    await runtime.dispose();
+  });
+
+  it("scores nested routes by specificity: static > param > wildcard", () => {
+    const staticRoute = defineRoute({ id: "static", path: "/docs/api" });
+    const paramRoute = defineRoute({ id: "param", path: "/docs/:slug" });
+    const wildcardRoute = defineRoute({ id: "wild", path: "/docs/*" });
+
+    const chain = matchNestedRoutes([wildcardRoute, paramRoute, staticRoute], "/docs/api");
+    expect(chain).not.toBeNull();
+    expect(chain![0]!.route.id).toBe("static");
+  });
+
+  it("layout route without children does not match", () => {
+    const layoutRoute = defineRoute({
+      id: "empty-layout",
+      path: "/",
+      layout: true,
+    });
+
+    const chain = matchNestedRoutes([layoutRoute], "/anything");
+    expect(chain).toBeNull();
+  });
+
+  it("stale loader run is discarded after navigation", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const route = defineRoute({ id: "stale", path: "/stale/:id" });
+
+    let resolveFirst: ((v: string) => void) | undefined;
+    let loaderCalls = 0;
+
+    const loader = defineRouteLoader({
+      route,
+      run: ({ location: current }) => {
+        loaderCalls += 1;
+        if (loaderCalls === 1) {
+          return Effect.async<string>((resume) => {
+            resolveFirst = (v: string) => resume(Effect.succeed(v));
+          });
+        }
+        return Effect.succeed(`fast:${current.params.id}`);
+      },
+    });
+
+    const history = createMemoryRouterHistory("/stale/1");
+    const router = createRouter({
+      routes: [route] as const,
+      history,
+      runtime,
+      loaders: [asAnyRouteLoader(loader)],
+    });
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    router.navigatePath("/stale/2");
+    await new Promise((r) => setTimeout(r, 50));
+
+    if (resolveFirst) {
+      resolveFirst("slow:1");
+    }
+    await new Promise((r) => setTimeout(r, 10));
+
+    const snapshot = router.getSnapshot();
+    expect(snapshot.pathname).toBe("/stale/2");
+
+    router.dispose();
+    await runtime.dispose();
+  });
+
+  it("navigate method uses route buildHref", () => {
+    const route = defineRoute({ id: "typed", path: "/typed/:id" });
+    const history = createMemoryRouterHistory("/");
+    const router = createRouter({
+      routes: [route] as const,
+      history,
+    });
+
+    router.navigate(route, { params: { id: "abc" } } as never);
+    expect(router.getSnapshot().pathname).toBe("/typed/abc");
+  });
+
+  it("navigate with replace option", () => {
+    const route = defineRoute({ id: "r", path: "/r/:id" });
+    const history = createMemoryRouterHistory("/r/1");
+    const router = createRouter({
+      routes: [route] as const,
+      history,
+    });
+
+    router.navigate(route, { params: { id: "2" }, replace: true } as never);
+    expect(router.getSnapshot().pathname).toBe("/r/2");
+  });
+
+  it("match returns null for non-matching route", () => {
+    const routeA = defineRoute({ id: "a", path: "/a" });
+    const routeB = defineRoute({ id: "b", path: "/b" });
+    const history = createMemoryRouterHistory("/a");
+    const router = createRouter({
+      routes: [routeA, routeB] as const,
+      history,
+    });
+
+    expect(router.match(routeA)).not.toBeNull();
+    expect(router.match(routeB)).toBeNull();
+  });
+
+  it("revalidate triggers loader re-run", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const route = defineRoute({ id: "rev", path: "/rev" });
+    let loadCount = 0;
+
+    const loader = defineRouteLoader({
+      route,
+      run: () => {
+        loadCount += 1;
+        return Effect.succeed(`v${loadCount}`);
+      },
+    });
+
+    const history = createMemoryRouterHistory("/rev");
+    const router = createRouter({
+      routes: [route] as const,
+      history,
+      runtime,
+      loaders: [asAnyRouteLoader(loader)],
+    });
+
+    await new Promise((r) => setTimeout(r, 50));
+    const before = loadCount;
+
+    await router.revalidate();
+    expect(loadCount).toBeGreaterThan(before);
 
     router.dispose();
     await runtime.dispose();

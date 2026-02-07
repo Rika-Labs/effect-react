@@ -88,4 +88,79 @@ describe("cli smoke", () => {
     );
     expect(Exit.isSuccess(devHelp)).toBe(true);
   });
+
+  it("builds dev args with no options", () => {
+    expect(createViteDevArgs()).toEqual(["x", "vite", "dev"]);
+  });
+
+  it("builds dev args with config only", () => {
+    expect(createViteDevArgs({ config: "custom.config.ts" })).toEqual([
+      "x",
+      "vite",
+      "dev",
+      "--config",
+      "custom.config.ts",
+    ]);
+  });
+
+  it("builds dev args with host only", () => {
+    expect(createViteDevArgs({ host: "0.0.0.0" })).toEqual([
+      "x",
+      "vite",
+      "dev",
+      "--host",
+      "0.0.0.0",
+    ]);
+  });
+
+  it("builds dev args with port only", () => {
+    expect(createViteDevArgs({ port: 8080 })).toEqual(["x", "vite", "dev", "--port", "8080"]);
+  });
+
+  it("builds build args with no options", () => {
+    expect(createViteBuildArgs()).toEqual(["x", "vite", "build"]);
+  });
+
+  it("builds build args with config", () => {
+    expect(createViteBuildArgs({ config: "vite.prod.ts" })).toEqual([
+      "x",
+      "vite",
+      "build",
+      "--config",
+      "vite.prod.ts",
+    ]);
+  });
+
+  it("builds start args with no options", () => {
+    expect(createViteStartArgs()).toEqual(["x", "vite", "preview"]);
+  });
+
+  it("builds start args with config", () => {
+    expect(createViteStartArgs({ config: "vite.preview.ts" })).toEqual([
+      "x",
+      "vite",
+      "preview",
+      "--config",
+      "vite.preview.ts",
+    ]);
+  });
+
+  it("ProcessSpawnError and ProcessExitError have correct names", () => {
+    const spawn = new ProcessSpawnError("cmd", new Error("oops"));
+    expect(spawn.name).toBe("ProcessSpawnError");
+    expect(spawn.command).toBe("cmd");
+    expect(spawn.message).toContain("cmd");
+
+    const exit = new ProcessExitError("cmd arg", 1);
+    expect(exit.name).toBe("ProcessExitError");
+    expect(exit.exitCode).toBe(1);
+    expect(exit.message).toContain("1");
+  });
+
+  it("runs process with custom cwd option", async () => {
+    const code = await Effect.runPromise(
+      runProcess({ command: "node", args: ["-e", "process.exit(0)"], cwd: "/tmp" }),
+    );
+    expect(code).toBe(0);
+  });
 });

@@ -1,4 +1,4 @@
-import type { Cause, Effect, Exit } from "effect";
+import type { Cause, Effect } from "effect";
 import type { QueryKey } from "../query/types";
 
 export type MutationStatus = "initial" | "pending" | "success" | "failure";
@@ -27,7 +27,7 @@ export interface UseMutationOptions<V, A, E, R> {
 }
 
 export interface UseMutationResult<V, A, E> extends MutationResult<A, E> {
-  readonly mutate: (variables: V) => Promise<Exit.Exit<A, E>>;
+  readonly mutate: (variables: V) => Promise<A>;
   readonly cancel: () => void;
   readonly reset: () => void;
 }

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import { Cause, Effect, Exit, Layer, ManagedRuntime } from "effect";
+import { Cause, Effect, Layer, ManagedRuntime } from "effect";
 import { useEffect, useRef } from "react";
 import { EffectProvider } from "../provider/EffectProvider";
 import { QueryCache } from "../query/QueryCache";
@@ -94,7 +94,7 @@ describe("useMutation", () => {
           return;
         }
         startedRef.current = true;
-        void mutate(9);
+        void mutate(9).catch(() => {});
       }, [mutate]);
 
       return <div data-testid="mutation-state">{status}</div>;
@@ -119,8 +119,8 @@ describe("useMutation", () => {
   it("interrupts previous mutation in same hook instance", async () => {
     const runtime = ManagedRuntime.make(Layer.empty);
     const cache = new QueryCache();
-    let firstResult: Exit.Exit<string, never> | undefined;
-    let secondResult: Exit.Exit<string, never> | undefined;
+    let firstError: unknown;
+    let secondResult: string | undefined;
 
     const Probe = () => {
       const mutation = useMutation<number, string, never, never>({
@@ -137,10 +137,15 @@ describe("useMutation", () => {
           return;
         }
         startedRef.current = true;
-        void mutate(1).then((result) => {
-          firstResult = result;
-          return result;
-        });
+        void mutate(1).then(
+          (result) => {
+            secondResult = result;
+            return result;
+          },
+          (error: unknown) => {
+            firstError = error;
+          },
+        );
         void mutate(2).then((result) => {
           secondResult = result;
           return result;
@@ -160,17 +165,107 @@ describe("useMutation", () => {
       expect(screen.getByTestId("mutation-state").textContent).toBe("success");
     });
 
-    expect(secondResult).toBeDefined();
-    expect(firstResult).toBeDefined();
-    if (secondResult !== undefined) {
-      expect(Exit.isSuccess(secondResult)).toBe(true);
-    }
-    if (firstResult !== undefined) {
-      expect(Exit.isFailure(firstResult)).toBe(true);
-      if (Exit.isFailure(firstResult)) {
-        expect(Cause.isInterruptedOnly(firstResult.cause)).toBe(true);
-      }
-    }
+    expect(secondResult).toBe("second");
+    expect(firstError).toBeDefined();
+
+    await runtime.dispose();
+  });
+
+  it("cancel resets mutation state and interrupts in-flight effect", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const cache = new QueryCache();
+    let interrupted = 0;
+
+    const Probe = () => {
+      const mutation = useMutation<void, string, never, never>({
+        mutation: Effect.succeed("value").pipe(
+          Effect.andThen(Effect.never),
+          Effect.onInterrupt(() =>
+            Effect.sync(() => {
+              interrupted += 1;
+            }),
+          ),
+        ),
+      });
+      const { mutate, cancel, status } = mutation;
+      const startedRef = useRef(false);
+
+      useEffect(() => {
+        if (startedRef.current) return;
+        startedRef.current = true;
+        void mutate(undefined).catch(() => {});
+      }, [mutate]);
+
+      return (
+        <div>
+          <button onClick={cancel}>cancel</button>
+          <div data-testid="mutation-state">{status}</div>
+        </div>
+      );
+    };
+
+    render(
+      <EffectProvider runtime={runtime} cache={cache}>
+        <Probe />
+      </EffectProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mutation-state").textContent).toBe("pending");
+    });
+
+    screen.getByRole("button", { name: "cancel" }).click();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mutation-state").textContent).toBe("initial");
+    });
+    expect(interrupted).toBe(1);
+
+    await runtime.dispose();
+  });
+
+  it("reset sets mutation back to initial without canceling fiber", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const cache = new QueryCache();
+
+    const Probe = () => {
+      const mutation = useMutation<{ readonly id: number }, string, never, never>({
+        mutation: ({ id }) => Effect.succeed(`done:${String(id)}`),
+      });
+      const { mutate, reset, status, data } = mutation;
+      const startedRef = useRef(false);
+
+      useEffect(() => {
+        if (startedRef.current) return;
+        startedRef.current = true;
+        void mutate({ id: 1 });
+      }, [mutate]);
+
+      return (
+        <div>
+          <button onClick={reset}>reset</button>
+          <div data-testid="mutation-state">{status}</div>
+          <div data-testid="mutation-data">{data ?? "-"}</div>
+        </div>
+      );
+    };
+
+    render(
+      <EffectProvider runtime={runtime} cache={cache}>
+        <Probe />
+      </EffectProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mutation-state").textContent).toBe("success");
+    });
+    expect(screen.getByTestId("mutation-data").textContent).toBe("done:1");
+
+    screen.getByRole("button", { name: "reset" }).click();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mutation-state").textContent).toBe("initial");
+    });
 
     await runtime.dispose();
   });
@@ -199,7 +294,7 @@ describe("useMutation", () => {
           return;
         }
         startedRef.current = true;
-        void mutate(undefined);
+        void mutate(undefined).catch(() => {});
       }, [mutate]);
 
       return <div data-testid="mutation-state">{status}</div>;
