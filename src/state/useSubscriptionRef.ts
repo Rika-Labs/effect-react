@@ -57,10 +57,6 @@ export const useSubscriptionRef = <A, S = A>(
   );
 
   useEffect(() => {
-    pushSelected(initial);
-  }, [initial, pushSelected]);
-
-  useEffect(() => {
     subscriptionRef.current?.cancel();
     const handle = runEffect(
       runtime,

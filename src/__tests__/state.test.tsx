@@ -93,6 +93,36 @@ describe("state hooks", () => {
     await runtime.dispose();
   });
 
+  it("does not enter a render loop when initial is an inline object", async () => {
+    const runtime = ManagedRuntime.make(Layer.empty);
+    const ref = await Effect.runPromise(SubscriptionRef.make({ count: 0 }));
+    let renderCount = 0;
+
+    const Probe = () => {
+      renderCount += 1;
+      const state = useSubscriptionRef({
+        ref,
+        initial: { count: 0 },
+      });
+      return <div data-testid="inline-count">{String(state.value.count)}</div>;
+    };
+
+    render(
+      <EffectProvider runtime={runtime}>
+        <Probe />
+      </EffectProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("inline-count").textContent).toBe("0");
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(renderCount).toBeLessThan(10);
+
+    await runtime.dispose();
+  });
+
   it("creates and updates local SubscriptionRef", async () => {
     const runtime = ManagedRuntime.make(Layer.empty);
     let api:
