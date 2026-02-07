@@ -21,7 +21,7 @@ bun run check
 
 | Script                 | Description                                          |
 | ---------------------- | ---------------------------------------------------- |
-| `bun run check`        | Run all checks (format, lint, typecheck, test, size) |
+| `bun run check`        | Run all checks (format, lint, typecheck, effect:check, test, size) |
 | `bun run test`         | Run tests with coverage                              |
 | `bun run test:watch`   | Run tests in watch mode                              |
 | `bun run lint`         | Lint with oxlint (type-aware, deny warnings)         |
@@ -30,7 +30,7 @@ bun run check
 | `bun run format:check` | Check formatting                                     |
 | `bun run typecheck`    | Type-check with tsgo                                 |
 | `bun run size:check`   | Build and verify bundle size                         |
-| `bun run build`        | Build with tsup (ESM + CJS)                          |
+| `bun run build`        | Build with tsup (ESM + CJS) + tsc (.d.ts)            |
 
 ## Toolchain
 
@@ -39,33 +39,38 @@ bun run check
 - **Linter** -- [oxlint](https://oxc.rs) (`oxlint`) with type-aware rules
 - **Type checker** -- [tsgo](https://github.com/nicolo-ribaudo/tsgo) (native TypeScript type checker)
 - **Test runner** -- [Vitest](https://vitest.dev) with jsdom environment
-- **Bundler** -- [tsup](https://tsup.egoist.dev) (ESM + CJS, with `.d.ts` generation)
+- **Bundler** -- [tsup](https://tsup.egoist.dev) (ESM + CJS) + `tsc` for `.d.ts` generation
 
 ## Project Structure
 
 ```
 src/
   internal/       -- Shared utilities (externalStore, effectRunner, duration, etc.)
-  provider/       -- EffectProvider and useRuntime
-  query/          -- useQuery, useSuspenseQuery, QueryCache, SSR support
-  mutation/       -- useMutation
-  state/          -- useDerived, useSubscriptionRef, useLocalSubscriptionRef
-  result/         -- Result<A, E> and Effect-to-Result conversions
+  adapters/       -- Platform adapters (Bun, Node)
   async/          -- Retry, timeout, and concurrency primitives
   browser/        -- Browser-specific sources (online, visibility, media query)
+  cli/            -- CLI tooling for the framework
   concurrency/    -- Concurrency control (semaphore, mutex-style guards)
   devtools/       -- Diagnostics and devtools integration
   error-boundary/ -- React error boundary for Effect failures
   events/         -- Event channel abstraction
   forms/          -- useForm with schema validation
-  http/           -- HTTP client built on Effect
+  framework/      -- Framework integration (includes Vite plugin)
+  mutation/       -- useMutation
   optimistic/     -- Optimistic update queue
   persistence/    -- Persistence layer (localStorage, etc.)
   policies/       -- Debounce and throttle policies
+  provider/       -- EffectProvider and useRuntime
+  query/          -- useQuery, useSuspenseQuery, QueryCache, SSR support
+  router/         -- Type-safe routing with loaders
   scheduling/     -- Scheduled/interval effects
-  schema/         -- Schema validation utilities
+  server/         -- Server actions, HTTP utilities, SSR rendering
   ssr/            -- Dehydrate/hydrate for server-side rendering
+  state/          -- useDerived, useSubscriptionRef, useLocalSubscriptionRef
   streams/        -- Stream subscription hooks
+  table/          -- Table model
+  url-state/      -- URL search param state with typed codecs
+  virtual/        -- Virtualized scrolling
   __tests__/      -- All test files
 ```
 
@@ -113,7 +118,7 @@ describe("myFunction", () => {
    ```bash
    bun run check
    ```
-   This runs formatting, linting, type checking, tests, and bundle size verification in sequence.
+   This runs formatting, linting, type checking, Effect standards checking, tests, and bundle size verification in sequence.
 4. **Push and open a PR** against `main`. Describe what your change does and why.
 5. **Address review feedback** -- Keep commits focused and easy to review.
 

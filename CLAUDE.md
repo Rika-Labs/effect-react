@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 bun install                # Install dependencies
-bun run check              # Full CI: format + lint + typecheck + test + size (run before pushing)
+bun run check              # Full CI: format + lint + typecheck + effect:check + test + size (run before pushing)
 bun run test               # Run tests with coverage
 bun run test:watch         # Watch mode
 bunx vitest run src/__tests__/query.test.ts   # Run a single test file
@@ -19,15 +19,15 @@ bun run lint               # Lint with oxlint (type-aware, deny warnings)
 bun run lint:fix           # Auto-fix lint issues
 bun run format             # Format with oxfmt
 bun run format:check       # Check formatting
-bun run build              # Build with tsup (ESM + CJS + .d.ts)
-bun run size:check         # Build + verify bundle size (max 650KB)
+bun run build              # Build with tsup (ESM + CJS) + tsc (.d.ts)
+bun run size:check         # Build + verify bundle size (max 800KB)
 ```
 
 ## Architecture
 
 ### Module Structure
 
-Each module in `src/` maps to a subpath export (`@effect-react/react/query`, `@effect-react/react/state`, etc.). There are 24 modules with 29 subpath exports. All modules are tree-shakeable.
+Each module in `src/` maps to a subpath export (`@effect-react/react/query`, `@effect-react/react/state`, etc.). There are 25 modules with 29 subpath exports. All modules are tree-shakeable.
 
 ### Core Pattern: Effect ↔ React Bridge
 
@@ -47,7 +47,9 @@ The central architectural pattern is bridging Effect's runtime into React's rend
 - **`server/`** — Server actions, HTTP utilities, SSR rendering — all composed as Effects.
 - **`url-state/`** — URL search param state with typed codecs.
 - **`table/`**, **`virtual/`** — Table model and virtualized scrolling.
-- **`internal/`** — Shared utilities: `keyHash.ts` (deterministic query key serialization), `duration.ts` (duration parsing), `pathUtils.ts`, `invariant.ts`.
+- **`adapters/`** — Platform adapters (Bun, Node).
+- **`cli/`** — CLI tooling for the framework.
+- **`internal/`** — Shared utilities: `keyHash.ts` (deterministic query key serialization), `duration.ts` (duration parsing), `pathUtils.ts`, `invariant.ts`, `runtimeContext.ts`.
 
 ### How Hooks Work
 
@@ -82,5 +84,5 @@ Hooks follow a consistent pattern:
 - **oxfmt** — formatter (not Prettier)
 - **oxlint** — linter (not ESLint), with type-aware rules via tsgo
 - **tsgo** — native TypeScript type checker (not `tsc`)
-- **tsup** — bundler
+- **tsup** — JS bundler (ESM + CJS); `tsc` generates `.d.ts`
 - **Vitest** — test runner
