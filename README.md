@@ -126,10 +126,6 @@ export function CreateUserButton() {
 | Browse APIs by module                             | [`docs/reference/README.md`](docs/reference/README.md)                                       |
 | See all docs entry points                         | [`docs/README.md`](docs/README.md)                                                           |
 
-## Notes on Previous Doc Paths
-
-The old monolithic API reference path (`docs/API.md`) has been replaced by module pages under `docs/reference/`.
-
 ---
 
 [Contributing](CONTRIBUTING.md) · [MIT License](LICENSE)
