@@ -8,4 +8,5 @@ coverage/
 *.tsbuildinfo
 .turbo/
 .context/
+.opencode/
 bun.lockb
