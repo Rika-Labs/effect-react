@@ -1,52 +1,33 @@
-# Server
+# `@effect-react/react/server`
 
-## Purpose
+HTTP request handling for an `EffectReactApp`.
 
-Define typed server actions, route handlers, decoding, and request pipelines.
+## API
 
-## Imports
+- `createRequestHandler(options)`
 
-```ts
-import {
-  defineServerAction,
-  useServerAction,
-  defineRouteHandler,
-  createRequestPipeline,
-} from "@effect-react/react/server";
-```
+## Behavior
 
-## Key APIs
+- `POST` requests to `actionPath` (default `"/_actions"`) are routed to `app.handleActionRequest`.
+- Other requests run SSR through framework navigation and rendering.
+- If no page matches, the default response renders a `Not Found` React element.
 
-- server actions: `defineServerAction`, `callServerAction`, `callServerActionByName`
-- action transports/dispatch: `createServerActionDispatcher`, `createInMemoryServerActionTransport`, `createFetchServerActionTransport`
-- route handlers: `defineRouteHandler`, `createRouteRequestHandlerEffect`
-- request context and decoding: `RequestContext`, `decodeJsonBodyEffect`, `decodeActionRequestPayload`
-- HTTP helpers: `createServerActionHttpHandlerEffect`, `createRequestScopedServerActionHttpHandlerEffect`
-- request orchestration: `createRequestPipeline`
+## Options
 
-## Behavior Guarantees
+- `app` (required)
+- `render({ request, page })` to override page rendering
+- `actionPath`
+- `hydrationGlobalName`
+- `onError(error)` to map render errors to `Response`
 
-- action input/output contracts are explicit and serializable.
-- request-scoped context can be layered into Effect execution.
-
-## Failure Model
-
-- transport, validation, and defect errors are represented by dedicated error types.
-- server boundary errors can be encoded/decoded through explicit codecs.
-
-## Minimal Example
+## Minimal example
 
 ```ts
-import { Effect } from "effect";
-import { defineServerAction } from "@effect-react/react/server";
+import { createRequestHandler } from "@effect-react/react/server";
+import { app } from "./app";
 
-export const ping = defineServerAction({
-  name: "ping",
-  handler: ({ message }: { message: string }) => Effect.succeed({ message }),
+export const handler = createRequestHandler({
+  app,
+  actionPath: "/_actions",
 });
 ```
-
-## Related
-
-- [`framework.md`](framework.md)
-- [`ssr.md`](ssr.md)

@@ -14,12 +14,7 @@ const SKIP_FILES = new Set<string>([
 ]);
 
 const ALLOW_ASYNC_AWAIT = new Set<string>([
-  "src/forms/useForm.ts", // Public form API returns Promise for ergonomic event-handler interop.
-  "src/framework/ssrOrchestrator.ts", // ReadableStream pull/cancel hooks are async by platform contract.
   "src/framework/vite.ts", // Vite plugin hooks are async by platform contract.
-  "src/server/actions.ts", // Transport adapter Promise boundary.
-  "src/server/http.ts", // Transport adapter Promise boundary.
-  "src/server/ssr.ts", // Promise boundary wrappers for adapter interoperability.
 ]);
 
 const ASYNC_AWAIT_PATTERN = /(^|[^\w.])async\s*(?:function\b|[\w(<])|\bawait\s+/;

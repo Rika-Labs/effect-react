@@ -1,24 +1,19 @@
-# effect-react Documentation
+# effect-react Docs (0.1.0)
 
-Use this as the entry point for all current docs.
+This docs set covers the current framework-first API only.
 
 ## Start Here
 
-| If you are...                                          | Start with                                                                         |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| Evaluating whether effect-react is right for your team | [`getting-started/why-effect-react.md`](getting-started/why-effect-react.md)       |
-| Starting a new app                                     | [`getting-started/quickstart-bun.md`](getting-started/quickstart-bun.md)           |
-| Migrating from Next.js or TanStack-style stacks        | [`getting-started/migrate-from-nextjs.md`](getting-started/migrate-from-nextjs.md) |
-| Learning runtime composition                           | [`concepts/mental-model.md`](concepts/mental-model.md)                             |
-| Implementing request-to-render flow                    | [`concepts/full-stack-flow.md`](concepts/full-stack-flow.md)                       |
-| Looking up exact APIs                                  | [`reference/README.md`](reference/README.md)                                       |
+- Quickstart: [`getting-started/quickstart-bun.md`](getting-started/quickstart-bun.md)
+- API reference: [`reference/README.md`](reference/README.md)
 
-## Sections
+## Public Package Exports
 
-- `getting-started/`: onboarding, quickstart, and migration entry points
-- `concepts/`: architectural model and full-stack flow
-- `reference/`: API docs by module/subpath export
+- `@effect-react/react` (barrel export)
+- `@effect-react/react/framework`
+- `@effect-react/react/config`
+- `@effect-react/react/server`
+- `@effect-react/react/client`
+- `@effect-react/react/testing`
 
-## Scope
-
-This docs set is purpose-first and current-state oriented. It describes what is implemented now and how to use it safely.
+Legacy module docs were removed in `0.1.0`; this set documents only the exports above.

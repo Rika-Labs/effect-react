@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "verbatimModuleSyntax": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "paths": {
+      "@twitter-demo/shared": ["../shared/src/index.ts"],
+      "@twitter-demo/shared/*": ["../shared/src/*"]
+    }
+  },
+  "include": ["src", "../shared/src"]
+}

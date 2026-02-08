@@ -1,11 +1,10 @@
 # @effect-react/react
 
-[![npm](https://img.shields.io/npm/v/@effect-react/react.svg)](https://www.npmjs.com/package/@effect-react/react)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+Effect-native full-stack React framework.
 
-Effect-first full-stack React primitives and framework APIs.
+React renders. Effect executes.
 
-Build Next.js and TanStack-style apps with one Effect runtime, typed failures, and cancellation by default.
+Use one Effect runtime for loaders, actions, navigation, SSR, and hydration with typed boundaries and explicit cache policy.
 
 ## Install
 
@@ -13,119 +12,121 @@ Build Next.js and TanStack-style apps with one Effect runtime, typed failures, a
 bun add @effect-react/react effect react react-dom
 ```
 
-```bash
-npm install @effect-react/react effect react react-dom
+## Public Modules
+
+- `@effect-react/react/framework`
+- `@effect-react/react/framework/vite`
+- `@effect-react/react/config`
+- `@effect-react/react/server`
+- `@effect-react/react/client`
+- `@effect-react/react/testing`
+
+## App Layout
+
+```txt
+app/
+  layout.tsx
+  page.tsx
+  users/
+    [id]/
+      page.tsx
+  actions/
+    counter.increment.ts
 ```
 
-Peer dependencies: `effect@^3.19`, `react@^19`, `react-dom@^19`.
+## Quick Start
 
-## Setup
+### 1) Vite discovery
 
-Create one runtime and provide it at the app root:
+```ts
+// vite.config.ts
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+import { effectReactVitePlugin } from "@effect-react/react/framework/vite";
+
+export default defineConfig({
+  plugins: [react(), effectReactVitePlugin({ appDir: "app" })],
+});
+```
+
+### 2) Route with Effect loader
 
 ```tsx
-import { Layer, ManagedRuntime } from "effect";
-import { EffectProvider } from "@effect-react/react";
-
-const runtime = ManagedRuntime.make(Layer.empty);
-
-export function AppRoot() {
-  return (
-    <EffectProvider runtime={runtime}>
-      <App />
-    </EffectProvider>
-  );
-}
-```
-
-## Start a New App
-
-```bash
-bunx effect-react new my-app
-cd my-app
-bun install
-bun run dev
-```
-
-## Build Your First Full-Stack Flow
-
-### Query from React with Effect
-
-```tsx
+// app/page.tsx
 import { Effect } from "effect";
-import { useQuery } from "@effect-react/react/query";
+import { defineLoader, definePage, defineRoute } from "@effect-react/react/framework";
 
-export function Users() {
-  const result = useQuery({
-    key: ["users"],
-    query: Effect.tryPromise(() => fetch("/api/users").then((r) => r.json())),
-    staleTime: "30 seconds",
-  });
-
-  if (result.status === "loading") return <p>Loading...</p>;
-  if (result.status === "failure") return <p>Failed to load</p>;
-  return <pre>{JSON.stringify(result.data, null, 2)}</pre>;
-}
-```
-
-### Define and call a typed server action
-
-```tsx
-import { Effect } from "effect";
-import { defineServerAction, useServerAction } from "@effect-react/react/server";
-
-const createUser = defineServerAction({
-  name: "createUser",
-  handler: ({ name }: { name: string }) =>
-    Effect.tryPromise(() =>
-      fetch("/api/users", { method: "POST", body: JSON.stringify({ name }) }),
-    ),
+const route = defineRoute({
+  id: "home",
+  path: "/",
 });
 
-export function CreateUserButton() {
-  const { run, pending } = useServerAction(createUser);
-  return (
-    <button disabled={pending} onClick={() => run({ name: "Ada" })}>
-      Create
-    </button>
-  );
-}
+const loader = defineLoader({
+  name: "home.loader",
+  routeId: route.id,
+  run: () =>
+    Effect.succeed({
+      headline: "Effect drives app execution",
+    }),
+});
+
+const HomePage = () => <main>Hello from effect-react</main>;
+
+export const page = definePage({
+  id: "home.page",
+  route,
+  loader,
+  component: HomePage,
+});
+
+export default page;
 ```
 
-## What This Replaces
+### 3) Typed Effect action
 
-| Existing stack                          | effect-react module                                           |
-| --------------------------------------- | ------------------------------------------------------------- |
-| Next.js route handlers + server actions | `@effect-react/react/server`, `@effect-react/react/framework` |
-| TanStack Query / SWR                    | `@effect-react/react/query`, `@effect-react/react/mutation`   |
-| TanStack Router / React Router          | `@effect-react/react/router`                                  |
-| TanStack Form / react-hook-form         | `@effect-react/react/forms`                                   |
-| Zustand / Jotai style reactive state    | `@effect-react/react/state`                                   |
-| TanStack Table / TanStack Virtual       | `@effect-react/react/table`, `@effect-react/react/virtual`    |
+```ts
+// app/actions/counter.increment.ts
+import { Effect, Schema } from "effect";
+import { defineAction } from "@effect-react/react/framework";
 
-## Choose effect-react if
+export const counterIncrement = defineAction({
+  name: "counter.increment",
+  input: Schema.Struct({ value: Schema.Number }),
+  output: Schema.Struct({ value: Schema.Number }),
+  error: Schema.Struct({ reason: Schema.String }),
+  handler: ({ value }) =>
+    value < 0
+      ? Effect.fail({ reason: "must be >= 0" })
+      : Effect.succeed({ value: value + 1 }),
+});
+```
 
-- You already use Effect on the server and want the same failure/cancellation model in React.
-- You want one composable runtime for data loading, mutations, routes, SSR hydration, and policies.
-- You want typed `E` channels instead of ad-hoc thrown errors across app boundaries.
+### 4) Server handler
 
-## Do not choose effect-react if
+```ts
+// src/server.ts
+import { createApp } from "@effect-react/react/framework";
+import { createRequestHandler } from "@effect-react/react/server";
+import manifest from "virtual:effect-react/manifest";
 
-- You need strict long-term API stability today. This package is currently `0.1.0`.
-- You want a batteries-included framework with no runtime composition choices.
-- Your team does not want to use Effect primitives in application code.
+const app = createApp({ manifest });
 
-## Documentation
+export const handler = createRequestHandler({ app });
+```
 
-| I need to...                                      | Read                                                                                         |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Understand what effect-react is and where it fits | [`docs/getting-started/why-effect-react.md`](docs/getting-started/why-effect-react.md)       |
-| Start a Bun-based app quickly                     | [`docs/getting-started/quickstart-bun.md`](docs/getting-started/quickstart-bun.md)           |
-| Migrate from Next.js patterns                     | [`docs/getting-started/migrate-from-nextjs.md`](docs/getting-started/migrate-from-nextjs.md) |
-| Learn the runtime and full-stack model            | [`docs/concepts/mental-model.md`](docs/concepts/mental-model.md)                             |
-| Browse APIs by module                             | [`docs/reference/README.md`](docs/reference/README.md)                                       |
-| See all docs entry points                         | [`docs/README.md`](docs/README.md)                                                           |
+### 5) Client hydrate
 
----
+```ts
+// src/client.tsx
+import { hydrateApp } from "@effect-react/react/client";
+import { createApp } from "@effect-react/react/framework";
+import manifest from "virtual:effect-react/manifest";
 
-[Contributing](CONTRIBUTING.md) · [MIT License](LICENSE)
+const app = createApp({ manifest });
+
+await hydrateApp({ app });
+```
+
+## License
+
+MIT

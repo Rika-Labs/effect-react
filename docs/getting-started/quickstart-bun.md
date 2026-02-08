@@ -1,50 +1,75 @@
-# Bun Quickstart
-
-## Who This Is For
-
-Developers who want to scaffold and run an effect-react app with Bun.
+# Bun Quickstart (0.1.0)
 
 ## Prerequisites
 
-- Bun installed
-- Node-compatible environment for local dev tools
+- Bun
+- React 19+
+- Effect 3+
 
-## Steps
-
-### 1. Scaffold
-
-```bash
-bunx effect-react new my-app
-```
-
-### 2. Install and run
+## 1. Install
 
 ```bash
-cd my-app
-bun install
-bun run dev
+bun add @effect-react/react effect react react-dom
 ```
 
-### 3. Build and start
+## 2. Define app contracts
 
-```bash
-bun run build
-bun run start
+```ts
+import { Effect, Schema } from "effect";
+import {
+  createApp,
+  defineAction,
+  defineManifest,
+  definePage,
+  defineRoute,
+} from "@effect-react/react/framework";
+import { createElement } from "react";
+
+const homeRoute = defineRoute({
+  id: "home",
+  path: "/",
+});
+
+const ping = defineAction({
+  name: "ping",
+  input: Schema.Struct({ message: Schema.String }),
+  output: Schema.Struct({ message: Schema.String }),
+  error: Schema.Struct({ reason: Schema.String }),
+  handler: ({ message }) => Effect.succeed({ message }),
+});
+
+const homePage = definePage({
+  id: "home.page",
+  route: homeRoute,
+  component: () => createElement("main", undefined, "Hello"),
+});
+
+export const app = createApp({
+  manifest: defineManifest({
+    pages: [homePage],
+    actions: [ping],
+  }),
+});
 ```
 
-## What the Starter Includes
+## 3. Create server handler
 
-- Vite + React project wiring
-- `effectReactVitePlugin()` discovery for routes and actions
-- `EffectProvider` bootstrap with a managed runtime
-- example `src/routes/*` and `src/actions/*` entries
+```ts
+import { createRequestHandler } from "@effect-react/react/server";
+import { app } from "./app";
 
-## Common Failure Modes
+export const handler = createRequestHandler({ app });
+```
 
-- Missing Bun: install Bun and rerun scaffold
-- Plugin not enabled: ensure `effectReactVitePlugin()` is present in `vite.config.ts`
-- Runtime not provided: ensure your root component uses `EffectProvider`
+## 4. Hydrate on the client
 
-## Expected Result
+```ts
+import { hydrateApp } from "@effect-react/react/client";
+import { app } from "./app";
 
-A local app that serves React UI, discovers routes/actions, and runs with an Effect runtime.
+await hydrateApp({ app });
+```
+
+## Optional: Vite app discovery
+
+Use `effectReactVitePlugin()` from `@effect-react/react/framework/vite` to generate a virtual manifest from `app/**` files (`page.*`, `layout.*`, `app/actions/*`, `app/middleware.*`).

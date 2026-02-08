@@ -8,6 +8,31 @@
     "outDir": "./dist",
     "rootDir": "./src"
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/__tests__/**", "src/index.cjs.ts"]
+  "include": [
+    "src/index.ts",
+    "src/framework/**/*.ts",
+    "src/framework/**/*.tsx",
+    "src/framework-vite/**/*.ts",
+    "src/framework-vite/**/*.tsx",
+    "src/config/**/*.ts",
+    "src/config/**/*.tsx",
+    "src/server/**/*.ts",
+    "src/server/**/*.tsx",
+    "src/client/**/*.ts",
+    "src/client/**/*.tsx",
+    "src/testing/**/*.ts",
+    "src/testing/**/*.tsx",
+    "src/kernel/**/*.ts",
+    "src/boundary/**/*.ts",
+    "src/data/**/*.ts",
+    "src/data/**/*.tsx",
+    "src/navigation/**/*.ts",
+    "src/navigation/**/*.tsx",
+    "src/actions/**/*.ts",
+    "src/actions/**/*.tsx",
+    "src/render/**/*.ts",
+    "src/react/**/*.ts",
+    "src/react/**/*.tsx"
+  ],
+  "exclude": ["src/__tests__/**"]
 }

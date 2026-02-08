@@ -1,55 +1,70 @@
-# Framework
+# `@effect-react/react/framework`
 
-## Purpose
+Framework composition and typed contracts.
 
-Compose full-stack runtime apps from route/action manifests and SSR orchestrators.
+## Core APIs
 
-## Imports
+- `createApp(options)`
+- `defineManifest(manifest)`
+- `definePage(page)`
+- `defineLayout(layout)`
+- `defineMiddleware(middleware)`
+- `defineRoute(route)`
+- `defineLoader(loader)`
+- `defineAction(action)`
+- `routesFromManifest(manifest)`
+- `loadersFromManifest(manifest)`
+- `cachePolicy(policy)`
+- `noStore()`
+
+## `createApp` result
+
+`createApp` returns an `EffectReactApp` with:
+
+- `manifest`
+- resolved `config`
+- managed `runtime`
+- `actions`
+- `matchPage(href)`
+- `handleActionRequest(request)`
+- `dispose()`
+
+## Minimal example
 
 ```ts
+import { createElement } from "react";
 import {
-  defineApp,
-  defineAppFromManifest,
-  defineAppFromManifests,
-  effectReactVitePlugin,
+  createApp,
+  defineManifest,
+  definePage,
+  defineRoute,
 } from "@effect-react/react/framework";
-```
 
-## Key APIs
+const homeRoute = defineRoute({ id: "home", path: "/" });
 
-- app composition: `defineApp`, `defineAppFromManifest`, `defineAppFromManifests`
-- runtime composition: `composeFrameworkRuntime`, `mergeRouteLoaders`
-- manifest registries: `loadRoutesFromManifest`, `loadServerActionsFromManifest`
-- file routes: `defineFileRoute`, `createFileRouteManifest`, `createNestedFileRouteTree`
-- SSR orchestration: `runFrameworkSsrOrchestrator`, `createFrameworkSsrRequestHandler`
-- Vite integration: `effectReactVitePlugin`
+const homePage = definePage({
+  id: "home.page",
+  route: homeRoute,
+  component: () => createElement("main", undefined, "Home"),
+});
 
-## Behavior Guarantees
-
-- manifest-driven app composition keeps server/client route/action contracts aligned.
-- SSR orchestration keeps render-mode and hydration transport explicit.
-
-## Failure Model
-
-- manifest loading and module resolution failures are represented with typed framework errors.
-
-## Minimal Example
-
-```ts
-import { Effect } from "effect";
-import { defineAppFromManifests } from "@effect-react/react/framework";
-
-const app = await Effect.runPromise(
-  defineAppFromManifests({
-    runtime,
-    routeManifestModule,
-    actionManifestModule,
+const app = createApp({
+  manifest: defineManifest({
+    pages: [homePage],
   }),
-);
+});
 ```
 
-## Related
+## Vite discovery contract
 
-- [`server.md`](server.md)
-- [`router.md`](router.md)
-- [`ssr.md`](ssr.md)
+Vite discovery APIs are exported from `@effect-react/react/framework/vite`:
+
+- `effectReactVitePlugin(options?)`
+- `discoverAppModules(root, appDir?)`
+
+`effectReactVitePlugin` scans `appDir` (default `app`) for:
+
+- pages: `**/page.tsx|ts|jsx|js`
+- layouts: `**/layout.tsx|ts|jsx|js`
+- actions: `app/actions/**/*.{ts,tsx,js,jsx}`
+- middleware: `app/middleware.ts|tsx|js|jsx`
