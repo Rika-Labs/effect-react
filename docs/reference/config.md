@@ -1,4 +1,4 @@
-# `@effect-react/react/config`
+# `@rika-labs/effect-react/config`
 
 Typed framework configuration.
 

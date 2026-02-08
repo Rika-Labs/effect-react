@@ -1,4 +1,4 @@
-# `@effect-react/react/testing`
+# `@rika-labs/effect-react/testing`
 
 Test helper for app creation.
 

@@ -1,4 +1,4 @@
-# `@effect-react/react/framework`
+# `@rika-labs/effect-react/framework`
 
 Framework composition and typed contracts.
 
@@ -38,7 +38,7 @@ import {
   defineManifest,
   definePage,
   defineRoute,
-} from "@effect-react/react/framework";
+} from "@rika-labs/effect-react/framework";
 
 const homeRoute = defineRoute({ id: "home", path: "/" });
 
@@ -57,7 +57,7 @@ const app = createApp({
 
 ## Vite discovery contract
 
-Vite discovery APIs are exported from `@effect-react/react/framework/vite`:
+Vite discovery APIs are exported from `@rika-labs/effect-react/framework/vite`:
 
 - `effectReactVitePlugin(options?)`
 - `discoverAppModules(root, appDir?)`

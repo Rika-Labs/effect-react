@@ -1,4 +1,4 @@
-# `@effect-react/react/server`
+# `@rika-labs/effect-react/server`
 
 HTTP request handling for an `EffectReactApp`.
 
@@ -23,7 +23,7 @@ HTTP request handling for an `EffectReactApp`.
 ## Minimal example
 
 ```ts
-import { createRequestHandler } from "@effect-react/react/server";
+import { createRequestHandler } from "@rika-labs/effect-react/server";
 import { app } from "./app";
 
 export const handler = createRequestHandler({

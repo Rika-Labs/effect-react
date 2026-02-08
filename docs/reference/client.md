@@ -1,4 +1,4 @@
-# `@effect-react/react/client`
+# `@rika-labs/effect-react/client`
 
 Client hydration entry point.
 
@@ -16,7 +16,7 @@ Client hydration entry point.
 ## Minimal example
 
 ```ts
-import { hydrateApp } from "@effect-react/react/client";
+import { hydrateApp } from "@rika-labs/effect-react/client";
 import { app } from "./app";
 
 await hydrateApp({ app });

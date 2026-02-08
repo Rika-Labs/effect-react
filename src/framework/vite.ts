@@ -84,7 +84,7 @@ const toImportPath = (value: string): string => `/${normalize(value)}`;
 
 const buildManifestModule = (modules: DiscoveredAppModules): string => {
   const lines: string[] = [
-    "import { defineManifest } from '@effect-react/react/framework';",
+    "import { defineManifest } from '@rika-labs/effect-react/framework';",
   ];
 
   modules.pages.forEach((modulePath, index) => {

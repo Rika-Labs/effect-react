@@ -10,3 +10,5 @@ coverage/
 .context/
 .opencode/
 bun.lockb
+
+.repo-lint-cache/

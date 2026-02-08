@@ -187,7 +187,7 @@ describe("framework vite discovery", () => {
           throw new Error("Expected manifest module text");
         }
 
-        expect(loaded).toContain("import { defineManifest } from '@effect-react/react/framework';");
+        expect(loaded).toContain("import { defineManifest } from '@rika-labs/effect-react/framework';");
         expect(loaded).toContain("'/src/app/page.tsx'");
         expect(loaded).toContain("'/src/app/admin/page.jsx'");
         expect(loaded).toContain("'/src/app/actions/users.create.ts'");

@@ -1,14 +1,14 @@
-# `@effect-react/react/state`
+# `@rika-labs/effect-react/state`
 
 State public module entrypoint.
 
 ## Import
 
 ```ts
-import * as State from "@effect-react/react/state";
+import * as State from "@rika-labs/effect-react/state";
 ```
 
 ## Notes
 
-- Root export: `@effect-react/react` also re-exports this module.
+- Root export: `@rika-labs/effect-react` also re-exports this module.
 - Public symbols are defined by `src/state/index.ts`.

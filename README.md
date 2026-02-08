@@ -1,4 +1,4 @@
-# @effect-react/react
+# @rika-labs/effect-react
 
 Effect-native full-stack React framework.
 
@@ -6,28 +6,31 @@ React renders. Effect executes.
 
 Use one Effect runtime for loaders, actions, navigation, SSR, and hydration with typed boundaries and explicit cache policy.
 
+- Docs: [`docs/README.md`](docs/README.md)
+- Changelog: [`CHANGELOG.md`](CHANGELOG.md)
+
 ## Install
 
 ```bash
-bun add @effect-react/react effect react react-dom
+bun add @rika-labs/effect-react effect react react-dom
 ```
 
 ## Public Modules
 
-- `@effect-react/react/framework`
-- `@effect-react/react/framework/vite`
-- `@effect-react/react/config`
-- `@effect-react/react/server`
-- `@effect-react/react/client`
-- `@effect-react/react/testing`
-- `@effect-react/react/state`
-- `@effect-react/react/query`
-- `@effect-react/react/router`
-- `@effect-react/react/form`
-- `@effect-react/react/grid`
-- `@effect-react/react/virtual`
-- `@effect-react/react/realtime`
-- `@effect-react/react/devtools`
+- `@rika-labs/effect-react/framework`
+- `@rika-labs/effect-react/framework/vite`
+- `@rika-labs/effect-react/config`
+- `@rika-labs/effect-react/server`
+- `@rika-labs/effect-react/client`
+- `@rika-labs/effect-react/testing`
+- `@rika-labs/effect-react/state`
+- `@rika-labs/effect-react/query`
+- `@rika-labs/effect-react/router`
+- `@rika-labs/effect-react/form`
+- `@rika-labs/effect-react/grid`
+- `@rika-labs/effect-react/virtual`
+- `@rika-labs/effect-react/realtime`
+- `@rika-labs/effect-react/devtools`
 
 ## App Layout
 
@@ -50,7 +53,7 @@ app/
 // vite.config.ts
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import { effectReactVitePlugin } from "@effect-react/react/framework/vite";
+import { effectReactVitePlugin } from "@rika-labs/effect-react/framework/vite";
 
 export default defineConfig({
   plugins: [react(), effectReactVitePlugin({ appDir: "app" })],
@@ -62,7 +65,7 @@ export default defineConfig({
 ```tsx
 // app/page.tsx
 import { Effect } from "effect";
-import { defineLoader, definePage, defineRoute } from "@effect-react/react/framework";
+import { defineLoader, definePage, defineRoute } from "@rika-labs/effect-react/framework";
 
 const route = defineRoute({
   id: "home",
@@ -95,7 +98,7 @@ export default page;
 ```ts
 // app/actions/counter.increment.ts
 import { Effect, Schema } from "effect";
-import { defineAction } from "@effect-react/react/framework";
+import { defineAction } from "@rika-labs/effect-react/framework";
 
 export const counterIncrement = defineAction({
   name: "counter.increment",
@@ -113,8 +116,8 @@ export const counterIncrement = defineAction({
 
 ```ts
 // src/server.ts
-import { createApp } from "@effect-react/react/framework";
-import { createRequestHandler } from "@effect-react/react/server";
+import { createApp } from "@rika-labs/effect-react/framework";
+import { createRequestHandler } from "@rika-labs/effect-react/server";
 import manifest from "virtual:effect-react/manifest";
 
 const app = createApp({ manifest });
@@ -126,8 +129,8 @@ export const handler = createRequestHandler({ app });
 
 ```ts
 // src/client.tsx
-import { hydrateApp } from "@effect-react/react/client";
-import { createApp } from "@effect-react/react/framework";
+import { hydrateApp } from "@rika-labs/effect-react/client";
+import { createApp } from "@rika-labs/effect-react/framework";
 import manifest from "virtual:effect-react/manifest";
 
 const app = createApp({ manifest });

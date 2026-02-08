@@ -1,4 +1,4 @@
-# Bun Quickstart (0.1.0)
+# Bun Quickstart (0.0.1)
 
 ## Prerequisites
 
@@ -9,7 +9,7 @@
 ## 1. Install
 
 ```bash
-bun add @effect-react/react effect react react-dom
+bun add @rika-labs/effect-react effect react react-dom
 ```
 
 ## 2. Define app contracts
@@ -22,7 +22,7 @@ import {
   defineManifest,
   definePage,
   defineRoute,
-} from "@effect-react/react/framework";
+} from "@rika-labs/effect-react/framework";
 import { createElement } from "react";
 
 const homeRoute = defineRoute({
@@ -55,7 +55,7 @@ export const app = createApp({
 ## 3. Create server handler
 
 ```ts
-import { createRequestHandler } from "@effect-react/react/server";
+import { createRequestHandler } from "@rika-labs/effect-react/server";
 import { app } from "./app";
 
 export const handler = createRequestHandler({ app });
@@ -64,7 +64,7 @@ export const handler = createRequestHandler({ app });
 ## 4. Hydrate on the client
 
 ```ts
-import { hydrateApp } from "@effect-react/react/client";
+import { hydrateApp } from "@rika-labs/effect-react/client";
 import { app } from "./app";
 
 await hydrateApp({ app });
@@ -72,4 +72,4 @@ await hydrateApp({ app });
 
 ## Optional: Vite app discovery
 
-Use `effectReactVitePlugin()` from `@effect-react/react/framework/vite` to generate a virtual manifest from `app/**` files (`page.*`, `layout.*`, `app/actions/*`, `app/middleware.*`).
+Use `effectReactVitePlugin()` from `@rika-labs/effect-react/framework/vite` to generate a virtual manifest from `app/**` files (`page.*`, `layout.*`, `app/actions/*`, `app/middleware.*`).

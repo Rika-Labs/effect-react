@@ -1,0 +1,14 @@
+useGitignore: true
+
+ignore:
+  - "node_modules/**"
+  - "dist/**"
+  - "coverage/**"
+  - "submodules/**"
+
+rules:
+  forbidPaths:
+    - "**/node_modules/**"
+  forbidNames:
+    - ".DS_Store"
+    - "Thumbs.db"

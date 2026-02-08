@@ -1,6 +1,6 @@
-# API Reference (0.1.0)
+# API Reference (0.0.1)
 
-The root export `@effect-react/react` re-exports these modules.
+The root export `@rika-labs/effect-react` re-exports these modules.
 
 ## Modules
 
@@ -19,4 +19,4 @@ The root export `@effect-react/react` re-exports these modules.
 - Realtime: [`realtime.md`](realtime.md)
 - Devtools: [`devtools.md`](devtools.md)
 
-These module docs are maintained for `0.1.0`.
+These module docs are maintained for `0.0.1`.

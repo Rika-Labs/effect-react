@@ -1,14 +1,14 @@
-# `@effect-react/react/query`
+# `@rika-labs/effect-react/query`
 
 Query public module entrypoint.
 
 ## Import
 
 ```ts
-import * as Query from "@effect-react/react/query";
+import * as Query from "@rika-labs/effect-react/query";
 ```
 
 ## Notes
 
-- Root export: `@effect-react/react` also re-exports this module.
+- Root export: `@rika-labs/effect-react` also re-exports this module.
 - Public symbols are defined by `src/query/index.ts`.
