@@ -97,6 +97,34 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
+      - name: Validate npm auth and package scope
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          PACKAGE_NAME="$(node -p "require('./package.json').name")"
+
+          echo "Package name: ${PACKAGE_NAME}"
+          npm whoami
+
+          case "${PACKAGE_NAME}" in
+            @*/*)
+              SCOPE="${PACKAGE_NAME#@}"
+              SCOPE="${SCOPE%%/*}"
+              echo "Validating npm scope access for @${SCOPE}"
+
+              if ! npm access ls-packages "${SCOPE}" >/dev/null 2>&1; then
+                echo "Unable to access npm scope @${SCOPE} with current NPM_TOKEN." >&2
+                echo "Create the scope on npm (user/org), ensure the publishing account is a member/owner, then regenerate NPM_TOKEN." >&2
+                exit 1
+              fi
+              ;;
+            *)
+              echo "Package is unscoped; skipping scope access validation."
+              ;;
+          esac
+
       - name: Validate tag matches package version
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
