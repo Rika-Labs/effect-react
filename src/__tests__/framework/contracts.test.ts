@@ -6,7 +6,9 @@ import {
   cachePolicy,
   defineAction,
   defineLoader,
+  defineLayout,
   defineManifest,
+  defineMiddleware,
   definePage,
   defineRoute,
   loadersFromManifest,
@@ -79,6 +81,20 @@ describe("framework contracts", () => {
     expect(noStore()).toEqual({
       mode: "no-store",
     });
+  });
+
+  it("returns layout and middleware definitions unchanged", () => {
+    const layout = {
+      id: "shell",
+      component: () => createElement("section"),
+    };
+
+    const middleware = {
+      use: () => Effect.succeed(new Response("ok")),
+    };
+
+    expect(defineLayout(layout)).toBe(layout);
+    expect(defineMiddleware(middleware)).toBe(middleware);
   });
 
   it("resolves strict defaults from config", () => {

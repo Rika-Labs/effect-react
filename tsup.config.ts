@@ -8,6 +8,14 @@ const entries = [
   "src/server/index.ts",
   "src/client/index.ts",
   "src/testing/index.ts",
+  "src/state/index.ts",
+  "src/query/index.ts",
+  "src/router/index.ts",
+  "src/form/index.ts",
+  "src/grid/index.ts",
+  "src/virtual/index.ts",
+  "src/realtime/index.ts",
+  "src/devtools/index.ts",
 ];
 
 const external = ["react", "react-dom", "effect"];

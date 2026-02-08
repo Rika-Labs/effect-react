@@ -8,7 +8,7 @@ const RuntimeContext = createContext<EffectReactManagedRuntime | null>(null);
 
 export interface EffectProviderProps {
   readonly runtime: EffectReactManagedRuntime;
-  readonly children: ReactNode;
+  readonly children?: ReactNode;
 }
 
 export const EffectProvider = ({ runtime, children }: EffectProviderProps) => {

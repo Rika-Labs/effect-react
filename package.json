@@ -68,6 +68,46 @@
       "types": "./dist/testing/index.d.ts",
       "import": "./dist/testing/index.js",
       "require": "./dist/testing/index.cjs"
+    },
+    "./state": {
+      "types": "./dist/state/index.d.ts",
+      "import": "./dist/state/index.js",
+      "require": "./dist/state/index.cjs"
+    },
+    "./query": {
+      "types": "./dist/query/index.d.ts",
+      "import": "./dist/query/index.js",
+      "require": "./dist/query/index.cjs"
+    },
+    "./router": {
+      "types": "./dist/router/index.d.ts",
+      "import": "./dist/router/index.js",
+      "require": "./dist/router/index.cjs"
+    },
+    "./form": {
+      "types": "./dist/form/index.d.ts",
+      "import": "./dist/form/index.js",
+      "require": "./dist/form/index.cjs"
+    },
+    "./grid": {
+      "types": "./dist/grid/index.d.ts",
+      "import": "./dist/grid/index.js",
+      "require": "./dist/grid/index.cjs"
+    },
+    "./virtual": {
+      "types": "./dist/virtual/index.d.ts",
+      "import": "./dist/virtual/index.js",
+      "require": "./dist/virtual/index.cjs"
+    },
+    "./realtime": {
+      "types": "./dist/realtime/index.d.ts",
+      "import": "./dist/realtime/index.js",
+      "require": "./dist/realtime/index.cjs"
+    },
+    "./devtools": {
+      "types": "./dist/devtools/index.d.ts",
+      "import": "./dist/devtools/index.js",
+      "require": "./dist/devtools/index.cjs"
     }
   },
   "scripts": {
@@ -76,8 +116,8 @@
     "build:types": "tsc -p tsconfig.build.json",
     "effect:check": "bun run scripts/check-effect-standards.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "oxlint src/index.ts src/framework src/framework-vite src/config src/server src/client src/testing src/kernel src/boundary src/data src/navigation src/actions src/render src/react src/__tests__/v1 src/__tests__/framework scripts/check-effect-standards.ts vitest.config.ts tsup.config.ts --type-aware --type-check --deny-warnings",
-    "lint:fix": "oxlint src/index.ts src/framework src/framework-vite src/config src/server src/client src/testing src/kernel src/boundary src/data src/navigation src/actions src/render src/react src/__tests__/v1 src/__tests__/framework scripts/check-effect-standards.ts vitest.config.ts tsup.config.ts --type-aware --type-check --fix",
+    "lint": "oxlint src/index.ts src/framework src/framework-vite src/config src/server src/client src/testing src/state src/query src/router src/form src/grid src/virtual src/realtime src/devtools src/kernel src/boundary src/data src/navigation src/actions src/render src/react src/__tests__/v1 src/__tests__/framework scripts/check-effect-standards.ts vitest.config.ts tsup.config.ts --type-aware --type-check --deny-warnings",
+    "lint:fix": "oxlint src/index.ts src/framework src/framework-vite src/config src/server src/client src/testing src/state src/query src/router src/form src/grid src/virtual src/realtime src/devtools src/kernel src/boundary src/data src/navigation src/actions src/render src/react src/__tests__/v1 src/__tests__/framework scripts/check-effect-standards.ts vitest.config.ts tsup.config.ts --type-aware --type-check --fix",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "test": "vitest run --coverage",

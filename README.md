@@ -20,6 +20,14 @@ bun add @effect-react/react effect react react-dom
 - `@effect-react/react/server`
 - `@effect-react/react/client`
 - `@effect-react/react/testing`
+- `@effect-react/react/state`
+- `@effect-react/react/query`
+- `@effect-react/react/router`
+- `@effect-react/react/form`
+- `@effect-react/react/grid`
+- `@effect-react/react/virtual`
+- `@effect-react/react/realtime`
+- `@effect-react/react/devtools`
 
 ## App Layout
 
