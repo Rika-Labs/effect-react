@@ -4,10 +4,8 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     include: [
-      "src/__tests__/v1/**/*.test.ts",
-      "src/__tests__/v1/**/*.test.tsx",
-      "src/__tests__/framework/**/*.test.ts",
-      "src/__tests__/framework/**/*.test.tsx",
+      "src/__tests__/**/*.test.ts",
+      "src/__tests__/**/*.test.tsx",
     ],
     coverage: {
       provider: "v8",

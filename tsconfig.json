@@ -70,10 +70,8 @@
     "src/render/**/*.ts",
     "src/react/**/*.ts",
     "src/react/**/*.tsx",
-    "src/__tests__/v1/**/*.ts",
-    "src/__tests__/v1/**/*.tsx",
-    "src/__tests__/framework/**/*.ts",
-    "src/__tests__/framework/**/*.tsx",
+    "src/__tests__/**/*.ts",
+    "src/__tests__/**/*.tsx",
     "scripts/check-effect-standards.ts",
     "vitest.config.ts",
     "tsup.config.ts"

@@ -6,7 +6,7 @@ import { defineRoute, navigateTo } from "../../navigation";
 import { createHydrationScript, dehydrateAppState, hydrateAppState } from "../../render";
 
 describe("hydration protocol", () => {
-  it("dehydrates and rehydrates v1 state", async () => {
+  it("dehydrates and rehydrates app state", async () => {
     const home = defineRoute({
       id: "home",
       path: "/",
